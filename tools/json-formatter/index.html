@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JSON formatter</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, textarea { -webkit-user-select: text; user-select: text; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; }
+    textarea { width: 100%; min-height: 120px; font-family: ui-monospace, monospace; font-size: 0.9rem; padding: 0.5rem; }
+    button { font: inherit; padding: 0.5rem 1rem; margin: 0.25rem 0.25rem 0 0; cursor: pointer; }
+    .row { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .error { color: #c00; margin-top: 0.25rem; }
+    .output-wrap { border: 1px solid #ddd; border-radius: 6px; background: #fafafa; max-height: 50vh; overflow: auto; }
+    .output-wrap pre { margin: 0; padding: 0.75rem; font-family: ui-monospace, monospace; font-size: 0.9rem; line-height: 1.4; white-space: pre-wrap; word-break: break-all; }
+    .search-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+    .search-row input { font-family: ui-monospace, monospace; font-size: 0.9rem; padding: 0.35rem 0.5rem; width: 14rem; max-width: 100%; border: 1px solid #ccc; border-radius: 4px; }
+    .search-row input:focus { outline: none; border-color: #1a73e8; }
+    .search-row .match-count { font-size: 0.85rem; color: #555; }
+    .search-row button { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
+    mark { background: #fef08a; color: inherit; padding: 0 1px; border-radius: 2px; }
+    mark.current { background: #facc15; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <label for="input">JSON input</label>
+    <textarea id="input" placeholder="Paste JSON here…"></textarea>
+  </div>
+  <button type="button" id="formatBtn">Format</button>
+  <button type="button" id="minifyBtn">Minify</button>
+  <button type="button" id="sendToConverterBtn" style="display: none;">Send to converter</button>
+  <button type="button" id="clearBtn">Clear</button>
+
+  <div id="result" style="display: none;">
+    <div class="row">
+      <div class="search-row" style="margin-bottom: 0.35rem;">
+        <label for="searchInput" style="margin-bottom: 0;">Search in formatted</label>
+        <input type="text" id="searchInput" placeholder="Search…" aria-label="Search in formatted JSON" autocomplete="off" />
+        <button type="button" id="prevBtn">Previous</button>
+        <button type="button" id="nextBtn">Next</button>
+        <span class="match-count" id="matchCount" aria-live="polite"></span>
+        <button type="button" id="copyBtn">Copy</button>
+      </div>
+      <div class="output-wrap">
+        <pre id="output"></pre>
+      </div>
+    </div>
+  </div>
+  <div id="parseError" class="row error" style="display: none;"></div>
+
+  <script>
+    (function () {
+      var INDENT = 2;
+      var input = document.getElementById('input');
+      var result = document.getElementById('result');
+      var outputPre = document.getElementById('output');
+      var parseError = document.getElementById('parseError');
+      var searchInput = document.getElementById('searchInput');
+      var prevBtn = document.getElementById('prevBtn');
+      var nextBtn = document.getElementById('nextBtn');
+      var matchCountEl = document.getElementById('matchCount');
+      var copyBtn = document.getElementById('copyBtn');
+
+      var formattedText = '';
+      var currentMatchIndex = -1;
+      var matchElements = [];
+
+      function escapeHtml(s) {
+        return s
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function escapeRegex(s) {
+        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }
+
+      function renderOutput(text, searchQuery, highlightIndex) {
+        var html = escapeHtml(text);
+        if (searchQuery && searchQuery.length > 0) {
+          try {
+            var re = new RegExp(escapeRegex(searchQuery), 'gi');
+            var parts = text.split(re);
+            var lower = text.toLowerCase();
+            var q = searchQuery.toLowerCase();
+            var idx = 0;
+            var newHtml = '';
+            var pos = 0;
+            while (pos < text.length) {
+              var found = lower.indexOf(q, pos);
+              if (found === -1) {
+                newHtml += escapeHtml(text.slice(pos));
+                break;
+              }
+              newHtml += escapeHtml(text.slice(pos, found)) + '<mark data-index="' + idx + '">' + escapeHtml(text.slice(found, found + searchQuery.length)) + '</mark>';
+              idx += 1;
+              pos = found + searchQuery.length;
+            }
+            html = newHtml;
+          } catch (e) {
+            // invalid regex or empty, show plain
+          }
+        }
+        outputPre.innerHTML = html;
+        matchElements = outputPre.querySelectorAll('mark');
+        if (matchElements.length) {
+          matchElements.forEach(function (el) { el.classList.remove('current'); });
+          highlightIndex = highlightIndex < 0 ? 0 : highlightIndex >= matchElements.length ? matchElements.length - 1 : highlightIndex;
+          currentMatchIndex = highlightIndex;
+          if (matchElements[highlightIndex]) {
+            matchElements[highlightIndex].classList.add('current');
+            matchElements[highlightIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+          matchCountEl.textContent = (highlightIndex + 1) + ' / ' + matchElements.length;
+        } else {
+          currentMatchIndex = -1;
+          matchCountEl.textContent = searchQuery && searchQuery.length ? '0 matches' : '';
+        }
+      }
+
+      function doFormat(indent) {
+        var raw = input.value.trim();
+        if (!raw) {
+          result.style.display = 'none';
+          parseError.style.display = 'none';
+          return;
+        }
+        try {
+          var parsed = JSON.parse(raw);
+          formattedText = indent > 0 ? JSON.stringify(parsed, null, indent) : JSON.stringify(parsed);
+        result.style.display = 'block';
+        parseError.style.display = 'none';
+        searchInput.value = '';
+        renderOutput(formattedText, '', 0);
+        document.getElementById('sendToConverterBtn').style.display = '';
+        } catch (e) {
+          result.style.display = 'none';
+          parseError.style.display = 'block';
+          parseError.textContent = 'Parse error: ' + (e.message || String(e));
+        }
+      }
+
+      function onSearchChange() {
+        if (!formattedText) return;
+        var q = searchInput.value;
+        renderOutput(formattedText, q, 0);
+      }
+
+      function goPrev() {
+        if (matchElements.length === 0) return;
+        currentMatchIndex = currentMatchIndex <= 0 ? matchElements.length - 1 : currentMatchIndex - 1;
+        matchElements.forEach(function (el) { el.classList.remove('current'); });
+        matchElements[currentMatchIndex].classList.add('current');
+        matchElements[currentMatchIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        matchCountEl.textContent = (currentMatchIndex + 1) + ' / ' + matchElements.length;
+      }
+
+      function goNext() {
+        if (matchElements.length === 0) return;
+        currentMatchIndex = currentMatchIndex >= matchElements.length - 1 ? 0 : currentMatchIndex + 1;
+        matchElements.forEach(function (el) { el.classList.remove('current'); });
+        matchElements[currentMatchIndex].classList.add('current');
+        matchElements[currentMatchIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        matchCountEl.textContent = (currentMatchIndex + 1) + ' / ' + matchElements.length;
+      }
+
+      document.getElementById('formatBtn').onclick = function () { doFormat(INDENT); };
+      document.getElementById('minifyBtn').onclick = function () { doFormat(0); };
+      document.getElementById('sendToConverterBtn').onclick = function () {
+        if (!formattedText) return;
+        if (window.parent !== window) {
+          window.parent.postMessage(
+            { type: 'helpers-send-to-converter', content: formattedText, from: 'json', to: 'xml' },
+            location.origin
+          );
+        }
+      };
+
+      document.getElementById('clearBtn').onclick = function () {
+        input.value = '';
+        formattedText = '';
+        result.style.display = 'none';
+        parseError.style.display = 'none';
+        searchInput.value = '';
+        document.getElementById('sendToConverterBtn').style.display = 'none';
+      };
+
+      searchInput.addEventListener('input', onSearchChange);
+      searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (e.shiftKey) goPrev();
+          else goNext();
+        }
+      });
+      prevBtn.addEventListener('click', goPrev);
+      nextBtn.addEventListener('click', goNext);
+
+      copyBtn.addEventListener('click', function () {
+        if (!formattedText) return;
+        navigator.clipboard.writeText(formattedText).then(function () {
+          var t = copyBtn.textContent;
+          copyBtn.textContent = 'Copied!';
+          copyBtn.disabled = true;
+          setTimeout(function () { copyBtn.textContent = t; copyBtn.disabled = false; }, 1500);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

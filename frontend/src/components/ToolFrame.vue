@@ -4,7 +4,12 @@ import { ref, computed, watch } from 'vue';
 const props = defineProps({
   tool: { type: Object, required: true },
   query: { type: Object, default: () => ({}) },
+  pendingContent: { type: String, default: null },
 });
+
+const emit = defineEmits(['content-sent']);
+
+const iframeRef = ref(null);
 
 // Use initial query for iframe src so that when the tool updates the URL via postMessage,
 // we don't reload the iframe (we only update the address bar).
@@ -23,6 +28,19 @@ const toolUrl = computed(() => {
   const q = new URLSearchParams(initialQuery.value).toString();
   return q ? path + '?' + q : path;
 });
+
+function onIframeLoad() {
+  if (props.tool?.id !== 'json-xml-array-converter' || !props.pendingContent) return;
+  const win = iframeRef.value?.contentWindow;
+  if (!win) return;
+  try {
+    win.postMessage(
+      { type: 'helpers-set-initial-content', content: props.pendingContent },
+      window.location.origin
+    );
+    emit('content-sent');
+  } catch (_) {}
+}
 </script>
 
 <template>
@@ -32,10 +50,12 @@ const toolUrl = computed(() => {
       <p v-if="tool.description" class="frame-desc">{{ tool.description }}</p>
     </div>
     <iframe
+      ref="iframeRef"
       :src="toolUrl"
       :title="tool.name"
       class="tool-iframe"
       sandbox="allow-scripts allow-same-origin allow-forms"
+      @load="onIframeLoad"
     />
   </div>
 </template>

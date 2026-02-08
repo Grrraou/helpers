@@ -20,9 +20,26 @@ const selectedTool = computed(() => {
   return manifest.value.tools.find((t) => t.id === route.params.slug) || null;
 });
 
+// Pending content to inject into converter (from JSON formatter "Send to converter") — not in URL
+const pendingConverterContent = ref(null);
+
 // Tools can update the shell URL via postMessage so links stay shareable
 function onMessage(e) {
   if (e.origin !== window.location.origin) return;
+  if (e.data?.type === 'helpers-send-to-converter') {
+    const content = e.data.content;
+    if (typeof content === 'string') {
+      pendingConverterContent.value = content;
+      const from = e.data.from || 'json';
+      const to = e.data.to || 'xml';
+      router.push({
+        name: 'tool',
+        params: { slug: 'json-xml-array-converter' },
+        query: { from, to },
+      });
+    }
+    return;
+  }
   if (e.data?.type !== 'helpers-set-query') return;
   if (route.name !== 'tool') return;
   const q = e.data.query;
@@ -108,7 +125,13 @@ function selectCategory(cat) {
         </template>
       </aside>
       <section class="content">
-        <ToolFrame v-if="selectedTool" :tool="selectedTool" :query="route.query" />
+        <ToolFrame
+          v-if="selectedTool"
+          :tool="selectedTool"
+          :query="route.query"
+          :pending-content="pendingConverterContent"
+          @content-sent="pendingConverterContent = null"
+        />
         <div v-else class="welcome">
           <h2>Pick a tool</h2>
           <p>Choose a tool from the list or use search. Each tool runs in its own sandbox.</p>

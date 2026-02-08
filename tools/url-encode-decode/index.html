@@ -25,7 +25,10 @@
   <button type="button" id="decode">Decode (← %XX)</button>
   <button type="button" id="clear">Clear</button>
   <div class="row">
-    <label for="output">Output</label>
+    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.25rem;">
+      <label for="output" style="margin-bottom: 0;">Output</label>
+      <button type="button" id="copyOutput">Copy</button>
+    </div>
     <textarea id="output" readonly placeholder="Result…" tabindex="0"></textarea>
   </div>
 
@@ -65,6 +68,18 @@
         input.value = '';
         output.value = '';
         pushQuery('', '');
+      };
+
+      document.getElementById('copyOutput').onclick = function () {
+        var text = output.value;
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(function () {
+          var btn = document.getElementById('copyOutput');
+          var t = btn.textContent;
+          btn.textContent = 'Copied!';
+          btn.disabled = true;
+          setTimeout(function () { btn.textContent = t; btn.disabled = false; }, 1500);
+        });
       };
 
       var params = new URLSearchParams(window.location.search);

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-08T17:26:09.627Z",
+  "generatedAt": "2026-02-08T17:40:30.347Z",
   "categories": [
     "Text",
     "Encoding",
@@ -50,6 +50,22 @@
       "order": 1
     },
     {
+      "id": "json-formatter",
+      "path": "tools/json-formatter/",
+      "name": "JSON formatter",
+      "category": "Web",
+      "description": "Format or minify JSON with indent. Search and navigate inside the formatted output.",
+      "keywords": [
+        "json",
+        "format",
+        "minify",
+        "pretty",
+        "parse",
+        "indent"
+      ],
+      "order": 1
+    },
+    {
       "id": "url-encode-decode",
       "path": "tools/url-encode-decode/",
       "name": "URL Encode / Decode",
@@ -64,6 +80,24 @@
         "query"
       ],
       "order": 2
+    },
+    {
+      "id": "json-xml-array-converter",
+      "path": "tools/json-xml-array-converter/",
+      "name": "JSON / XML / Array converter",
+      "category": "Web",
+      "description": "Convert between JSON, XML, PHP array, JavaScript, Python dict, and YAML. Accepts JSON formatter output via Send to converter.",
+      "keywords": [
+        "json",
+        "xml",
+        "array",
+        "php",
+        "javascript",
+        "python",
+        "yaml",
+        "convert"
+      ],
+      "order": 3
     },
     {
       "id": "time-converter",

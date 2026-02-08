@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JSON / XML / Array converter</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, textarea, select { -webkit-user-select: text; user-select: text; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; }
+    textarea { width: 100%; min-height: 140px; font-family: ui-monospace, monospace; font-size: 0.9rem; padding: 0.5rem; }
+    button, select { font: inherit; padding: 0.5rem 1rem; margin: 0.25rem 0.25rem 0 0; cursor: pointer; }
+    select { min-width: 10rem; }
+    .row { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .convert-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .error { color: #c00; margin-top: 0.25rem; }
+    .output-wrap { border: 1px solid #ddd; border-radius: 6px; background: #fafafa; }
+    .output-wrap pre { margin: 0; padding: 0.75rem; font-family: ui-monospace, monospace; font-size: 0.9rem; white-space: pre-wrap; word-break: break-all; max-height: 50vh; overflow: auto; }
+    .note { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <label for="input">Input (JSON, XML, or PHP/JS array)</label>
+    <textarea id="input" placeholder="Paste JSON, XML, or array syntax…"></textarea>
+  </div>
+  <div class="row convert-row">
+    <label for="inputFormat" style="margin-bottom: 0;">Input format</label>
+    <select id="inputFormat"></select>
+    <button type="button" id="detectBtn">Detect input format</button>
+    <label for="format" style="margin-bottom: 0;">Output format</label>
+    <select id="format"></select>
+    <button type="button" id="convertBtn">Convert</button>
+    <button type="button" id="clearBtn">Clear</button>
+  </div>
+  <div id="result" style="display: none;">
+    <div class="row">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.35rem;">
+        <label style="margin-bottom: 0;">Output</label>
+        <button type="button" id="copyBtn">Copy</button>
+      </div>
+      <div class="output-wrap">
+        <pre id="output"></pre>
+      </div>
+    </div>
+  </div>
+  <div id="parseError" class="row error" style="display: none;"></div>
+
+  <script>
+    (function () {
+      var input = document.getElementById('input');
+      var inputFormatSelect = document.getElementById('inputFormat');
+      var formatSelect = document.getElementById('format');
+      var outputPre = document.getElementById('output');
+      var result = document.getElementById('result');
+      var parseError = document.getElementById('parseError');
+
+      // Same format options for input and output (input adds "Auto")
+      var FORMAT_OPTIONS = [
+        { value: 'json', label: 'JSON' },
+        { value: 'xml', label: 'XML' },
+        { value: 'php', label: 'PHP array' },
+        { value: 'js', label: 'JavaScript' },
+        { value: 'typescript', label: 'TypeScript' },
+        { value: 'python', label: 'Python dict' },
+        { value: 'ruby', label: 'Ruby Hash' },
+        { value: 'rust', label: 'Rust' },
+        { value: 'go', label: 'Go map' },
+        { value: 'java', label: 'Java' },
+        { value: 'csharp', label: 'C#' },
+        { value: 'kotlin', label: 'Kotlin' },
+        { value: 'swift', label: 'Swift' },
+        { value: 'scala', label: 'Scala' },
+        { value: 'r', label: 'R' },
+        { value: 'elixir', label: 'Elixir' },
+        { value: 'lua', label: 'Lua table' },
+        { value: 'yaml', label: 'YAML' }
+      ];
+
+      (function initFormatSelects() {
+        var autoOpt = document.createElement('option');
+        autoOpt.value = 'auto';
+        autoOpt.textContent = 'Auto';
+        inputFormatSelect.appendChild(autoOpt);
+        FORMAT_OPTIONS.forEach(function (o) {
+          var opt = document.createElement('option');
+          opt.value = o.value;
+          opt.textContent = o.label;
+          inputFormatSelect.appendChild(opt);
+          var optOut = document.createElement('option');
+          optOut.value = o.value;
+          optOut.textContent = o.label;
+          formatSelect.appendChild(optOut);
+        });
+      })();
+
+      var VALID_FROM = { auto: 1, array: 1 };
+      var VALID_TO = {};
+      FORMAT_OPTIONS.forEach(function (o) { VALID_FROM[o.value] = 1; VALID_TO[o.value] = 1; });
+
+      function pushQuery() {
+        if (window.parent !== window) {
+          var from = inputFormatSelect.value;
+          var to = formatSelect.value;
+          if (!VALID_FROM[from]) from = 'auto';
+          if (!VALID_TO[to]) to = 'json';
+          window.parent.postMessage(
+            { type: 'helpers-set-query', query: { from: from, to: to } },
+            location.origin
+          );
+        }
+      }
+
+      // Receive content from parent (e.g. JSON formatter "Send to converter")
+      window.addEventListener('message', function (e) {
+        if (e.origin !== window.location.origin) return;
+        if (e.data?.type === 'helpers-set-initial-content' && typeof e.data.content === 'string') {
+          input.value = e.data.content;
+          result.style.display = 'none';
+          parseError.style.display = 'none';
+        }
+      });
+
+      // Read URL params on load (formats only, no content)
+      (function applyUrlParams() {
+        var params = new URLSearchParams(window.location.search);
+        var from = params.get('from');
+        var to = params.get('to');
+        if (VALID_FROM[from]) inputFormatSelect.value = from === 'array' ? 'php' : from;
+        if (VALID_TO[to]) formatSelect.value = to;
+      })();
+
+      function escapeXml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&apos;');
+      }
+
+      function safeTagName(name) {
+        return String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
+      }
+
+      var XML_INDENT = 2;
+
+      function objToXml(obj, rootTag, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        rootTag = rootTag || 'root';
+        var p = pad(indent);
+        var pInner = pad(indent + XML_INDENT);
+        if (obj === null || obj === undefined) return p + '<' + rootTag + '/>';
+        if (typeof obj !== 'object') return p + '<' + rootTag + '>' + escapeXml(obj) + '</' + rootTag + '>';
+        if (Array.isArray(obj)) {
+          var out = [];
+          out.push(p + '<' + rootTag + '>');
+          for (var i = 0; i < obj.length; i++) out.push(objToXml(obj[i], 'item', indent + XML_INDENT));
+          out.push(p + '</' + rootTag + '>');
+          return out.join('\n');
+        }
+        var xml = [];
+        xml.push(p + '<' + rootTag + '>');
+        for (var k in obj) {
+          if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+          var v = obj[k];
+          var tag = safeTagName(k);
+          if (v === null || v === undefined) xml.push(pInner + '<' + tag + '/>');
+          else if (Array.isArray(v)) {
+            for (var j = 0; j < v.length; j++) xml.push(objToXml(v[j], tag, indent + XML_INDENT));
+          } else if (typeof v === 'object') {
+            xml.push(pInner + '<' + tag + '>');
+            xml.push(objToXml(v, tag, indent + XML_INDENT));
+            xml.push(pInner + '</' + tag + '>');
+          } else xml.push(pInner + '<' + tag + '>' + escapeXml(v) + '</' + tag + '>');
+        }
+        xml.push(p + '</' + rootTag + '>');
+        return xml.join('\n');
+      }
+
+      function xmlToObj(node) {
+        if (!node || node.nodeType !== 1) return null;
+        var children = node.childNodes;
+        var hasElement = false;
+        for (var i = 0; i < children.length; i++) {
+          if (children[i].nodeType === 1) { hasElement = true; break; }
+        }
+        if (!hasElement) return node.textContent || '';
+        var obj = {};
+        for (var j = 0; j < children.length; j++) {
+          var c = children[j];
+          if (c.nodeType !== 1) continue;
+          var tag = c.nodeName;
+          var val = xmlToObj(c);
+          if (obj[tag] === undefined) obj[tag] = val;
+          else if (!Array.isArray(obj[tag])) obj[tag] = [obj[tag], val];
+          else obj[tag].push(val);
+        }
+        return obj;
+      }
+
+      function parseXml(str) {
+        str = str.trim();
+        // XML declaration must be at document start; we wrap in <root>, so remove it first
+        str = str.replace(/^<\?xml[^?]*\?>\s*/i, '');
+        var parser = new DOMParser();
+        var doc = parser.parseFromString('<root>' + str + '</root>', 'text/xml');
+        var err = doc.querySelector('parsererror');
+        if (err) return null;
+        var root = doc.documentElement;
+        var first = root.firstElementChild;
+        if (!first) return {};
+        if (root.children.length === 1) return xmlToObj(first);
+        var arr = [];
+        for (var i = 0; i < root.children.length; i++) arr.push(xmlToObj(root.children[i]));
+        return arr;
+      }
+
+      function replaceLiteralsOutsideQuotes(str) {
+        var out = '';
+        var i = 0;
+        var inDq = false;
+        var inSq = false;
+        while (i < str.length) {
+          var c = str[i];
+          if (!inDq && !inSq) {
+            if (c === '"' && (i === 0 || str[i - 1] !== '\\')) { inDq = true; out += c; i++; continue; }
+            if (c === "'" && (i === 0 || str[i - 1] !== '\\')) { inSq = true; out += c; i++; continue; }
+            if (str.slice(i, i + 4) === 'True' && !/\w/.test(str[i + 4] || '')) { out += 'true'; i += 4; continue; }
+            if (str.slice(i, i + 5) === 'False' && !/\w/.test(str[i + 5] || '')) { out += 'false'; i += 5; continue; }
+            if (str.slice(i, i + 4) === 'None' && !/\w/.test(str[i + 4] || '')) { out += 'null'; i += 4; continue; }
+            if (str.slice(i, i + 3) === 'nil' && !/\w/.test(str[i + 3] || '')) { out += 'null'; i += 3; continue; }
+            if (str.slice(i, i + 4) === 'NULL' && !/\w/.test(str[i + 4] || '')) { out += 'null'; i += 4; continue; }
+          } else if (inDq && c === '"' && str[i - 1] !== '\\') inDq = false;
+          else if (inSq && c === "'" && str[i - 1] !== '\\') inSq = false;
+          out += c;
+          i++;
+        }
+        return out;
+      }
+
+      function stripPhpWrapper(str) {
+        str = str.trim();
+        if (str.indexOf('<?php') === 0) str = str.slice(5).trim();
+        str = str.replace(/^\s*\$[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*/, '');
+        if (str.indexOf('?>') !== -1) str = str.replace(/\?>\s*$/, '').trim();
+        str = str.replace(/;\s*$/, '').trim();
+        return str;
+      }
+
+      function stripRustWrapper(str) {
+        str = str.trim();
+        str = str.replace(/\bvec!\s*\[/g, '[');
+        for (;;) {
+          var idx = str.indexOf('serde_json::json!');
+          if (idx === -1) break;
+          var open = str.indexOf('(', idx);
+          if (open === -1) break;
+          var depth = 1;
+          var i = open + 1;
+          var inDq = false;
+          var inSq = false;
+          var escape = false;
+          while (i < str.length && depth > 0) {
+            var c = str[i];
+            if (escape) { escape = false; i++; continue; }
+            if (c === '\\' && (inDq || inSq)) { escape = true; i++; continue; }
+            if (!inDq && !inSq) {
+              if (c === '"') { inDq = true; i++; continue; }
+              if (c === "'") { inSq = true; i++; continue; }
+              if (c === '(') { depth++; i++; continue; }
+              if (c === ')') { depth--; if (depth === 0) break; i++; continue; }
+            } else if (c === '"' && inDq) inDq = false;
+            else if (c === "'" && inSq) inSq = false;
+            i++;
+          }
+          if (depth !== 0) break;
+          var inner = str.slice(open + 1, i).trim();
+          str = str.slice(0, idx) + inner + str.slice(i + 1);
+        }
+        str = str.replace(/([}\]])[\s\n]*\)\s*;?\s*$/, '$1').trim();
+        return str;
+      }
+
+      function stripGoWrapper(str) {
+        str = str.trim();
+        var MAP_OPEN = '\x04M';
+        var ARR_OPEN = '\x04A';
+        str = str.replace(/map\s*\[\s*string\s*\]\s*interface\s*\{\s*\}\s*\{/g, MAP_OPEN);
+        str = str.replace(/\[\s*\]\s*interface\s*\{\s*\}\s*\{/g, ARR_OPEN);
+        var stack = [];
+        var out = '';
+        var i = 0;
+        while (i < str.length) {
+          if (str.slice(i, i + MAP_OPEN.length) === MAP_OPEN) {
+            out += '{';
+            stack.push('}');
+            i += MAP_OPEN.length;
+            continue;
+          }
+          if (str.slice(i, i + ARR_OPEN.length) === ARR_OPEN) {
+            out += '[';
+            stack.push(']');
+            i += ARR_OPEN.length;
+            continue;
+          }
+          if (str[i] === '"') {
+            out += str[i];
+            i++;
+            while (i < str.length) {
+              out += str[i];
+              if (str[i] === '\\') { i++; if (i < str.length) { out += str[i]; i++; } continue; }
+              if (str[i] === '"') { i++; break; }
+              i++;
+            }
+            continue;
+          }
+          if (str[i] === '}') {
+            if (stack.length && stack.pop() === ']') out += ']';
+            else out += '}';
+            i++;
+            continue;
+          }
+          out += str[i];
+          i++;
+        }
+        return out.replace(/,(\s*[}\]])/g, '$1').trim();
+      }
+
+      function findMatchingParen(str, openIdx) {
+        var depth = 1;
+        var i = openIdx + 1;
+        var inDq = false, inSq = false, escape = false;
+        while (i < str.length && depth > 0) {
+          var c = str[i];
+          if (escape) { escape = false; i++; continue; }
+          if (c === '\\' && (inDq || inSq)) { escape = true; i++; continue; }
+          if (!inDq && !inSq) {
+            if (c === '"') { inDq = true; i++; continue; }
+            if (c === "'") { inSq = true; i++; continue; }
+            if (c === '(') { depth++; i++; continue; }
+            if (c === ')') { depth--; if (depth === 0) return i; i++; continue; }
+          } else if (c === '"' && inDq) inDq = false;
+          else if (c === "'" && inSq) inSq = false;
+          i++;
+        }
+        return -1;
+      }
+
+      function findMatchingBrace(str, openIdx) {
+        var depth = 1;
+        var i = openIdx + 1;
+        var inDq = false, inSq = false, escape = false;
+        while (i < str.length && depth > 0) {
+          var c = str[i];
+          if (escape) { escape = false; i++; continue; }
+          if (c === '\\' && (inDq || inSq)) { escape = true; i++; continue; }
+          if (!inDq && !inSq) {
+            if (c === '"') { inDq = true; i++; continue; }
+            if (c === "'") { inSq = true; i++; continue; }
+            if (c === '{') { depth++; i++; continue; }
+            if (c === '}') { depth--; if (depth === 0) return i; i++; continue; }
+          } else if (c === '"' && inDq) inDq = false;
+          else if (c === "'" && inSq) inSq = false;
+          i++;
+        }
+        return -1;
+      }
+
+      function stripCSharpWrapper(str) {
+        str = str.trim();
+        str = str.replace(/\bnew\s+Dictionary\s*<\s*string\s*,\s*object\s*>\s*\{/g, '{');
+        str = str.replace(/\[\s*"((?:[^"\\]|\\.)*)"\s*\]\s*=\s*/g, '"$1": ');
+        for (;;) {
+          var idx = str.indexOf('new[] {');
+          if (idx === -1) break;
+          var brace = str.indexOf('{', idx);
+          var close = findMatchingBrace(str, brace);
+          if (close === -1) break;
+          var inner = str.slice(brace + 1, close).trim();
+          str = str.slice(0, idx) + '[' + inner + ']' + str.slice(close + 1);
+        }
+        return str.replace(/,(\s*[}\]])/g, '$1').trim();
+      }
+
+      function stripKotlinWrapper(str) {
+        str = str.trim();
+        for (;;) {
+          var idx = str.indexOf('listOf(');
+          if (idx === -1) break;
+          var open = str.indexOf('(', idx);
+          var close = findMatchingParen(str, open);
+          if (close === -1) break;
+          var inner = str.slice(open + 1, close).trim();
+          str = str.slice(0, idx) + '[' + inner + ']' + str.slice(close + 1);
+        }
+        str = str.replace(/"((?:[^"\\]|\\.)*)"\s+to\s+/g, '"$1": ');
+        for (;;) {
+          var idx = str.indexOf('mapOf(');
+          if (idx === -1) break;
+          var open = str.indexOf('(', idx);
+          var close = findMatchingParen(str, open);
+          if (close === -1) break;
+          var inner = str.slice(open + 1, close).trim();
+          str = str.slice(0, idx) + '{' + inner + '}' + str.slice(close + 1);
+        }
+        return str.replace(/,(\s*[}\]])/g, '$1').trim();
+      }
+
+      function stripScalaWrapper(str) {
+        str = str.trim();
+        for (;;) {
+          var idx = str.indexOf('List(');
+          while (idx !== -1 && idx > 0 && /\w/.test(str[idx - 1])) idx = str.indexOf('List(', idx + 1);
+          if (idx === -1) break;
+          var open = str.indexOf('(', idx);
+          var close = findMatchingParen(str, open);
+          if (close === -1) break;
+          var inner = str.slice(open + 1, close).trim();
+          str = str.slice(0, idx) + '[' + inner + ']' + str.slice(close + 1);
+        }
+        str = str.replace(/"((?:[^"\\]|\\.)*)"\s*->\s*/g, function (_, k) { return '"' + k + '": '; });
+        for (;;) {
+          var idx = str.indexOf('Map(');
+          while (idx !== -1 && idx > 0 && /\w/.test(str[idx - 1])) idx = str.indexOf('Map(', idx + 1);
+          if (idx === -1) break;
+          var open = str.indexOf('(', idx);
+          var close = findMatchingParen(str, open);
+          if (close === -1) break;
+          var inner = str.slice(open + 1, close).trim();
+          str = str.slice(0, idx) + '{' + inner + '}' + str.slice(close + 1);
+        }
+        return str.replace(/,(\s*[}\]])/g, '$1').trim();
+      }
+
+      function stripElixirWrapper(str) {
+        str = str.trim();
+        str = str.replace(/"([^"]*)"\s*=>\s*/g, function (_, k) { return '\x22' + k + '\x22: '; });
+        str = str.replace(/%\{/g, '{');
+        return str.replace(/,(\s*[}\]])/g, '$1').trim();
+      }
+
+      function stripLuaWrapper(str) {
+        str = str.trim();
+        str = str.replace(/\[\s*"((?:[^"\\]|\\.)*)"\s*\]\s*=\s*/g, function (_, k) { return '\x22' + k.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '\x22: '; });
+        var changed = true;
+        while (changed) {
+          changed = false;
+          var open = 0;
+          while ((open = str.indexOf('{', open)) !== -1) {
+            var close = findMatchingBrace(str, open);
+            if (close === -1) break;
+            var inner = str.slice(open + 1, close);
+            var hasKeyColon = /(^|,)\s*"(?:[^"\\]|\\.)*"\s*:/.test(inner);
+            if (!hasKeyColon) {
+              str = str.slice(0, open) + '[' + inner + ']' + str.slice(close + 1);
+              changed = true;
+              break;
+            }
+            open++;
+          }
+        }
+        return str.replace(/,(\s*[}\]])/g, '$1').trim();
+      }
+
+      function stripRWrapper(str) {
+        str = str.trim();
+        str = str.replace(/"([^"]*)"\s*=\s*/g, function (_, k) { return '\x22' + k + '\x22: '; });
+        for (;;) {
+          var idx = str.indexOf('list(');
+          while (idx !== -1 && idx > 0 && /\w/.test(str[idx - 1])) idx = str.indexOf('list(', idx + 1);
+          if (idx === -1) break;
+          var open = str.indexOf('(', idx);
+          var close = findMatchingParen(str, open);
+          if (close === -1) break;
+          var inner = str.slice(open + 1, close).trim();
+          var isAssoc = /"[^"]*"\s*:/.test(inner);
+          str = str.slice(0, idx) + (isAssoc ? '{' : '[') + inner + (isAssoc ? '}' : ']') + str.slice(close + 1);
+        }
+        return str.replace(/,(\s*[}\]])/g, '$1').trim();
+      }
+
+      function stripJavaWrapper(str) {
+        str = str.trim();
+        for (;;) {
+          var idx = str.indexOf('Arrays.asList(');
+          if (idx === -1) break;
+          var open = str.indexOf('(', idx);
+          var close = findMatchingParen(str, open);
+          if (close === -1) break;
+          var inner = str.slice(open + 1, close).trim();
+          str = str.slice(0, idx) + '[' + inner + ']' + str.slice(close + 1);
+        }
+        for (;;) {
+          var idx = str.indexOf('Map.entry(');
+          if (idx === -1) break;
+          var open = str.indexOf('(', idx);
+          var close = findMatchingParen(str, open);
+          if (close === -1) break;
+          var inner = str.slice(open + 1, close);
+          if (inner.trim().indexOf('"') !== 0) break;
+          var keyEnd = inner.indexOf('"', 1);
+          while (keyEnd !== -1 && inner[keyEnd - 1] === '\\') keyEnd = inner.indexOf('"', keyEnd + 1);
+          if (keyEnd === -1) break;
+          var key = inner.slice(0, keyEnd + 1);
+          var valueStr = inner.slice(keyEnd + 1).replace(/^\s*,\s*/, '').trim();
+          str = str.slice(0, idx) + key + ': ' + valueStr + str.slice(close + 1);
+        }
+        for (;;) {
+          var idx = str.indexOf('Map.ofEntries(');
+          if (idx === -1) break;
+          var open = str.indexOf('(', idx);
+          var close = findMatchingParen(str, open);
+          if (close === -1) break;
+          var inner = str.slice(open + 1, close).trim();
+          str = str.slice(0, idx) + '{' + inner + '}' + str.slice(close + 1);
+        }
+        return str.replace(/,(\s*[}\]])/g, '$1').trim();
+      }
+
+      function phpBracketsToBraces(s) {
+        var stack = [];
+        var out = '';
+        var i = 0;
+        function skipString(q) {
+          out += s[i];
+          i++;
+          while (i < s.length) {
+            if (s[i] === '\\') { out += s[i]; out += s[i + 1]; i += 2; continue; }
+            out += s[i];
+            if (s[i] === q) { i++; return; }
+            i++;
+          }
+        }
+        function lookAheadAssociative(from) {
+          var j = from;
+          while (j < s.length && /\s/.test(s[j])) j++;
+          if (s[j] !== '"') return false;
+          j++;
+          while (j < s.length && (s[j] !== '"' || s[j - 1] === '\\')) j++;
+          j++;
+          while (j < s.length && /\s/.test(s[j])) j++;
+          return s[j] === ':';
+        }
+        while (i < s.length) {
+          if (s[i] === '[') {
+            if (lookAheadAssociative(i + 1)) { out += '{'; stack.push('}'); i++; continue; }
+            out += '[';
+            stack.push(']');
+            i++;
+            continue;
+          }
+          if (s[i] === ']') {
+            if (stack.length) out += stack.pop();
+            else out += s[i];
+            i++;
+            continue;
+          }
+          if (s[i] === '"' || s[i] === "'") { skipString(s[i]); continue; }
+          out += s[i];
+          i++;
+        }
+        return out;
+      }
+
+      function quoteUnquotedKeys(s) {
+        var placeholders = [];
+        s = s.replace(/"([^"\\]|\\.)*"/g, function (m) {
+          placeholders.push(m);
+          return '\x01P' + (placeholders.length - 1) + 'P\x01';
+        });
+        s = s.replace(/([\{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+        s = s.replace(/\x01P(\d+)P\x01/g, function (_, n) { return placeholders[parseInt(n, 10)]; });
+        return s;
+      }
+
+      function tryParsePhpOrJs(str) {
+        str = str.trim();
+        if (!str) return null;
+        if (looksLikeLuaTable(str)) str = stripLuaWrapper(str);
+        if (/%\{\s*"[^"]*"\s*=>/.test(str)) str = stripElixirWrapper(str);
+        if (/\blist\s*\(\s*"[^"]*"\s*=/.test(str)) str = stripRWrapper(str);
+        if (/\bMap\s*\(\s*"[^"]*"\s*->|\bList\s*\(/.test(str)) str = stripScalaWrapper(str);
+        if (/\bmapOf\s*\(|\blistOf\s*\(/.test(str)) str = stripKotlinWrapper(str);
+        if (/\bnew\s+Dictionary\s*<\s*string\s*,\s*object\s*>|\[\s*"[^"]*"\s*\]\s*=\s*|\bnew\s*\[\s*\]\s*\{/.test(str)) str = stripCSharpWrapper(str);
+        if (/\bMap\.ofEntries\s*\(|\bMap\.entry\s*\(|\bArrays\.asList\s*\(/.test(str)) str = stripJavaWrapper(str);
+        if (/map\s*\[\s*string\s*\]\s*interface\s*\{\s*\}\s*\{|\[\s*\]\s*interface\s*\{\s*\}\s*\{/.test(str)) str = stripGoWrapper(str);
+        if (/\bserde_json::json!|\bvec!\s*\[/.test(str)) str = stripRustWrapper(str);
+        str = stripPhpWrapper(str);
+        str = replaceLiteralsOutsideQuotes(str);
+        var s = str
+          .replace(/\barray\s*\(/gi, '[')
+          .replace(/\s*=>\s*/g, ':');
+        var i = 0;
+        while (i < s.length) {
+          if (s[i] === "'" && (i === 0 || s[i - 1] !== '\\')) {
+            var end = s.indexOf("'", i + 1);
+            while (end !== -1 && s[end - 1] === '\\') end = s.indexOf("'", end + 1);
+            if (end === -1) return null;
+            var inner = s.slice(i + 1, end).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            s = s.slice(0, i) + '"' + inner + '"' + s.slice(end + 1);
+            i = i + inner.length + 2;
+            continue;
+          }
+          i++;
+        }
+        s = quoteUnquotedKeys(s);
+        s = s.replace(/,(\s*[}\]])/g, '$1');
+        s = phpBracketsToBraces(s);
+        try {
+          return JSON.parse(s);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function looksLikeXml(str) {
+        var r = str.trim();
+        return /^\s*<\?xml/i.test(r) || /^\s*<[a-zA-Z_]/.test(r);
+      }
+
+      function looksLikeLuaTable(r) {
+        if (!r || r.indexOf('new Dictionary') !== -1 || r.indexOf('new[]') !== -1) return false;
+        var t = r.trim();
+        if (t.charAt(0) !== '{') return false;
+        return r.indexOf('] =') !== -1;
+      }
+
+      function looksLikeYaml(r) {
+        if (!r || r.length < 3) return false;
+        var t = r.trim();
+        if (t.charAt(0) === '{' || t.charAt(0) === '[' || t.charAt(0) === '<') return false;
+        return (/^\s*\S+\s*:\s*.+/m.test(r) || /^\s*\S+\s*:\s*$/m.test(r) || /^\s*-\s+/.m.test(r)) && !/^\s*</m.test(r);
+      }
+
+      function parseYaml(str) {
+        str = str.trim();
+        if (!str) return null;
+        var lines = str.split(/\r?\n/);
+        var stack = [{ obj: null, indent: -1, key: null }];
+        var i = 0;
+        function getIndent(line) {
+          var m = line.match(/^(\s*)/);
+          return m ? m[1].length : 0;
+        }
+        function findColonOutsideQuotes(s) {
+          var inDq = false, inSq = false, escape = false;
+          for (var j = 0; j < s.length; j++) {
+            var c = s[j];
+            if (escape) { escape = false; continue; }
+            if (c === '\\' && (inDq || inSq)) { escape = true; continue; }
+            if (!inDq && !inSq) {
+              if (c === '"') { inDq = true; continue; }
+              if (c === "'") { inSq = true; continue; }
+              if (c === ':') return j;
+            } else if (c === '"' && inDq) inDq = false;
+            else if (c === "'" && inSq) inSq = false;
+          }
+          return -1;
+        }
+        function parseValue(s) {
+          s = (s || '').trim();
+          if (s === 'null' || s === '~') return null;
+          if (s === 'true' || s === 'yes' || s === 'on') return true;
+          if (s === 'false' || s === 'no' || s === 'off') return false;
+          if (s === '') return null;
+          if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+          if (/^-?\d+\.\d+([eE][+-]?\d+)?$/.test(s)) return parseFloat(s);
+          if (s.indexOf('"') === 0 && s.length > 1) {
+            var end = -1; for (var q = 1; q < s.length; q++) { if (s[q] === '"' && s[q - 1] !== '\\') { end = q; break; } }
+            if (end > 0) return s.slice(1, end).replace(/\\"/g, '"');
+          }
+          if (s.indexOf("'") === 0 && s.length > 1) {
+            var end2 = -1; for (var q2 = 1; q2 < s.length; q2++) { if (s[q2] === "'" && s[q2 - 1] !== '\\') { end2 = q2; break; } }
+            if (end2 > 0) return s.slice(1, end2).replace(/\\'/g, "'");
+          }
+          return s;
+        }
+        while (i < lines.length) {
+          var line = lines[i];
+          var indent = getIndent(line);
+          var rest = line.trim();
+          if (!rest || rest.indexOf('#') === 0) { i++; continue; }
+          while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop();
+          var top = stack[stack.length - 1];
+          if (rest.indexOf('- ') === 0) {
+            var listVal = rest.slice(2).trim();
+            var arr = top.obj;
+            if (!Array.isArray(arr)) {
+              arr = [];
+              if (stack.length === 1) stack[0].obj = arr;
+              else {
+                var parent = stack[stack.length - 2];
+                var currentKey = stack[stack.length - 1].key;
+                if (currentKey != null) parent.obj[currentKey] = arr;
+                else parent.obj[parent.key] = arr;
+              }
+              stack[stack.length - 1].obj = arr;
+            }
+            var ci = findColonOutsideQuotes(listVal);
+            if (ci !== -1 && listVal.indexOf('"') !== 0 && listVal.indexOf("'") !== 0) {
+              var k = listVal.slice(0, ci).trim();
+              var v = listVal.slice(ci + 1).trim();
+              var sub = {};
+              if (v === '') {
+                sub[k] = {};
+                arr.push(sub);
+                stack.push({ obj: sub[k], indent: indent, key: k });
+              } else {
+                sub[k] = parseValue(v);
+                arr.push(sub);
+                stack.push({ obj: sub, indent: indent, key: null });
+              }
+            } else {
+              arr.push(parseValue(listVal));
+            }
+            i++;
+            continue;
+          }
+          var colon = findColonOutsideQuotes(rest);
+          if (colon === -1) { i++; continue; }
+          var key = rest.slice(0, colon).trim().replace(/^["']|["']$/g, '');
+          var val = rest.slice(colon + 1).trim();
+          var obj = top.obj;
+          if (obj === null) obj = stack[0].obj = {};
+          else if (!(obj && typeof obj === 'object' && !Array.isArray(obj))) { i++; continue; }
+          if (val === '' || val === '|' || val === '>') {
+            var child = {};
+            obj[key] = child;
+            stack.push({ obj: child, indent: indent, key: key });
+            i++;
+            continue;
+          }
+          var inlineList = val.match(/^-\s+(.*)$/);
+          if (inlineList) {
+            var oneItem = parseValue(inlineList[1].trim());
+            var arr = [oneItem];
+            obj[key] = arr;
+            stack.push({ obj: arr, indent: indent, key: key });
+            i++;
+            continue;
+          }
+          obj[key] = parseValue(val);
+          i++;
+        }
+        return stack[0].obj;
+      }
+
+      function inferFormatFromRaw(raw) {
+        var r = raw.trim();
+        if (looksLikeXml(r)) return 'xml';
+        if (looksLikeLuaTable(r)) return 'lua';
+        if (/\bMap\s*\(\s*"[^"]*"\s*->|\bList\s*\(/.test(r)) return 'scala';
+        if (/\bmapOf\s*\(|\blistOf\s*\(/.test(r)) return 'kotlin';
+        if (/\bnew\s+Dictionary\s*<\s*string\s*,\s*object\s*>|\bnew\s*\[\s*\]\s*\{/.test(r)) return 'csharp';
+        if (/\bMap\.ofEntries\s*\(|\bMap\.entry\s*\(|\bArrays\.asList\s*\(/.test(r)) return 'java';
+        if (/map\s*\[\s*string\s*\]\s*interface\s*\{\s*\}\s*\{|\[\s*\]\s*interface\s*\{\s*\}\s*\{/.test(r)) return 'go';
+        if (/\bserde_json::json!|\bvec!\s*\[/.test(r)) return 'rust';
+        if (r.indexOf('<?php') !== -1 || (r.indexOf('$') === 0 && r.indexOf('=>') !== -1)) return 'php';
+        if (/\b(True|False|None)\b/.test(r)) return 'python';
+        if (/%\{\s*"[^"]*"\s*=>/.test(r)) return 'elixir';
+        if (/\bnil\b/.test(r) && r.indexOf('=>') !== -1) return 'ruby';
+        if (r.indexOf('array(') !== -1 && r.indexOf('=>') !== -1) return 'php';
+        if (/\blist\s*\(\s*"[^"]*"\s*=/.test(r)) return 'r';
+        if (/"[^"]+"\s*=>/.test(r)) return 'ruby';
+        if (r.indexOf('=>') !== -1) return 'php';
+        if (r.indexOf("'") !== -1 && r.indexOf(':') !== -1) return 'python';
+        if (/^\s*\[\s*"(?:[^"\\]|\\.)*"\s*:/.test(r)) return 'swift';
+        if (looksLikeYaml(r)) return 'yaml';
+        return 'js';
+      }
+
+      function detectInputFormat() {
+        var raw = input.value.trim();
+        if (!raw) {
+          parseError.style.display = 'block';
+          parseError.textContent = 'No input to detect.';
+          return;
+        }
+        var parsed = parseInput(raw, undefined);
+        if (parsed.format) {
+          var setVal = parsed.format === 'array' ? 'php' : parsed.format;
+          inputFormatSelect.value = setVal;
+          pushQuery();
+          var label = setVal;
+          for (var i = 0; i < FORMAT_OPTIONS.length; i++) if (FORMAT_OPTIONS[i].value === setVal) { label = FORMAT_OPTIONS[i].label; break; }
+          parseError.style.display = 'block';
+          parseError.textContent = 'Detected: ' + label + '.';
+          parseError.style.color = '#0a0';
+          setTimeout(function () {
+            parseError.style.display = 'none';
+            parseError.style.color = '';
+          }, 2000);
+        } else {
+          parseError.style.display = 'block';
+          parseError.textContent = 'Could not detect format. Try selecting manually.';
+          parseError.style.color = '';
+        }
+      }
+
+      function parseInput(str, preferredFrom) {
+        str = str.trim();
+        if (!str) return { obj: null, format: null };
+        var useParser = preferredFrom === 'json' ? 'json' : preferredFrom === 'xml' ? 'xml' : (preferredFrom === 'php' || preferredFrom === 'js' || preferredFrom === 'array') ? 'array' : preferredFrom ? 'relaxed' : null;
+        if (useParser === 'json') {
+          try {
+            var o = JSON.parse(str);
+            return { obj: o, format: 'json' };
+          } catch (e) {}
+          return { obj: null, format: null };
+        }
+        if (useParser === 'xml') {
+          var xml = parseXml(str);
+          return xml !== null ? { obj: xml, format: 'xml' } : { obj: null, format: null };
+        }
+        if (useParser === 'array') {
+          var php = tryParsePhpOrJs(str);
+          return php !== null ? { obj: php, format: 'array' } : { obj: null, format: null };
+        }
+        if (useParser === 'relaxed') {
+          if (preferredFrom === 'yaml') {
+            try {
+              var yamlObj = parseYaml(str);
+              if (yamlObj !== null && typeof yamlObj === 'object') return { obj: yamlObj, format: 'yaml' };
+            } catch (e) {}
+            return { obj: null, format: null };
+          }
+          var relaxed = tryParsePhpOrJs(str);
+          return relaxed !== null ? { obj: relaxed, format: preferredFrom } : { obj: null, format: null };
+        }
+        try {
+          var o = JSON.parse(str);
+          return { obj: o, format: 'json' };
+        } catch (e) {}
+        if (looksLikeXml(str)) {
+          var xml = parseXml(str);
+          if (xml !== null) return { obj: xml, format: 'xml' };
+        }
+        if (looksLikeYaml(str)) {
+          try {
+            var yamlObj = parseYaml(str);
+            if (yamlObj != null && typeof yamlObj === 'object') return { obj: yamlObj, format: 'yaml' };
+          } catch (e) {}
+        }
+        var php = tryParsePhpOrJs(str);
+        if (php !== null) return { obj: php, format: inferFormatFromRaw(str) };
+        return { obj: null, format: null };
+      }
+
+      function toPhp(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'null';
+        if (obj === undefined) return 'null';
+        if (typeof obj === 'string') return "'" + String(obj).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) {
+          var numeric = obj.every(function (_, i) { return Object.prototype.hasOwnProperty.call(obj, i); });
+          if (numeric) return '[' + obj.map(function (v) { return toPhp(v, indent + 1); }).join(', ') + ']';
+          var parts = [];
+          for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) parts.push(pad(indent + 1) + "'" + k + "' => " + toPhp(obj[k], indent + 1));
+          return '[\n' + parts.join(',\n') + '\n' + pad(indent) + ']';
+        }
+        var out = [];
+        for (var key in obj) if (Object.prototype.hasOwnProperty.call(obj, key)) out.push(pad(indent + 1) + "'" + String(key).replace(/'/g, "\\'") + "' => " + toPhp(obj[key], indent + 1));
+        return '[\n' + out.join(',\n') + '\n' + pad(indent) + ']';
+      }
+
+      function toJs(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'null';
+        if (typeof obj === 'string') return JSON.stringify(obj);
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return '[\n' + obj.map(function (v) { return pad(indent + 1) + toJs(v, indent + 1); }).join(',\n') + '\n' + pad(indent) + ']';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : JSON.stringify(k)) + ': ' + toJs(obj[k], indent + 1));
+        return '{\n' + out.join(',\n') + '\n' + pad(indent) + '}';
+      }
+
+      function toPython(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'None';
+        if (typeof obj === 'string') return "'" + String(obj).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+        if (typeof obj === 'number' || typeof obj === 'boolean') return obj === true ? 'True' : obj === false ? 'False' : String(obj);
+        if (Array.isArray(obj)) return '[\n' + obj.map(function (v) { return pad(indent + 1) + toPython(v, indent + 1); }).join(',\n') + '\n' + pad(indent) + ']';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + JSON.stringify(k) + ': ' + toPython(obj[k], indent + 1));
+        return '{\n' + out.join(',\n') + '\n' + pad(indent) + '}';
+      }
+
+      function toYaml(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'null';
+        if (typeof obj === 'string') return /[:#\[\]{}|>*&%]|\s#/.test(obj) || obj.indexOf('\n') >= 0 ? '"' + obj.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"' : obj;
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) {
+          var lines = [];
+          for (var i = 0; i < obj.length; i++) lines.push(pad(indent) + '- ' + toYaml(obj[i], indent + 1).replace(/^\s+/, ''));
+          return lines.join('\n');
+        }
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent) + String(k).replace(/:$/g, '') + ': ' + toYaml(obj[k], indent + 1).replace(/^\s+/, ''));
+        return out.join('\n');
+      }
+
+      function toRuby(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'nil';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return '[\n' + obj.map(function (v) { return pad(indent + 1) + toRuby(v, indent + 1); }).join(",\n") + '\n' + pad(indent) + ']';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '"' + String(k).replace(/"/g, '\\"') + '" => ' + toRuby(obj[k], indent + 1));
+        return '{\n' + out.join(",\n") + '\n' + pad(indent) + '}';
+      }
+
+      function toLua(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'nil';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) {
+          var parts = [];
+          for (var i = 0; i < obj.length; i++) parts.push(pad(indent + 1) + toLua(obj[i], indent + 1));
+          return '{\n' + parts.join(",\n") + '\n' + pad(indent) + '}';
+        }
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '["' + String(k).replace(/"/g, '\\"') + '"] = ' + toLua(obj[k], indent + 1));
+        return '{\n' + out.join(",\n") + '\n' + pad(indent) + '}';
+      }
+
+      function toGo(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '\t'.repeat(n); };
+        if (obj === null) return 'nil';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return '[]interface{}{\n' + obj.map(function (v) { return pad(indent + 1) + toGo(v, indent + 1) + ','; }).join("\n") + '\n' + pad(indent) + '}';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '"' + String(k).replace(/"/g, '\\"') + '": ' + toGo(obj[k], indent + 1) + ',');
+        return 'map[string]interface{}{\n' + out.join("\n") + '\n' + pad(indent) + '}';
+      }
+
+      function toCSharp(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return "null";
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return "new[] {\n" + obj.map(function (v) { return pad(indent + 1) + toCSharp(v, indent + 1) + ','; }).join("\n") + '\n' + pad(indent) + '}';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '["' + String(k).replace(/"/g, '\\"') + '"] = ' + toCSharp(obj[k], indent + 1));
+        return "new Dictionary<string, object> {\n" + out.join(",\n") + '\n' + pad(indent) + '}';
+      }
+
+      function toKotlin(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'null';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return "listOf(\n" + obj.map(function (v) { return pad(indent + 1) + toKotlin(v, indent + 1); }).join(",\n") + '\n' + pad(indent) + ')';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '"' + String(k).replace(/"/g, '\\"') + '" to ' + toKotlin(obj[k], indent + 1));
+        return "mapOf(\n" + out.join(",\n") + '\n' + pad(indent) + ')';
+      }
+
+      function toSwift(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'nil';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return "[\n" + obj.map(function (v) { return pad(indent + 1) + toSwift(v, indent + 1); }).join(",\n") + '\n' + pad(indent) + ']';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '"' + String(k).replace(/"/g, '\\"') + '": ' + toSwift(obj[k], indent + 1));
+        return "[\n" + out.join(",\n") + '\n' + pad(indent) + ']';
+      }
+
+      function toRust(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'serde_json::Value::Null';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number') return String(obj);
+        if (typeof obj === 'boolean') return obj ? 'true' : 'false';
+        if (Array.isArray(obj)) return 'vec![\n' + obj.map(function (v) { return pad(indent + 1) + toRust(v, indent + 1) + ','; }).join('\n') + '\n' + pad(indent) + ']';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '"' + String(k).replace(/"/g, '\\"') + '": ' + toRust(obj[k], indent + 1) + ',');
+        return 'serde_json::json!(\n' + pad(indent) + '{\n' + out.join('\n') + '\n' + pad(indent) + '}\n' + pad(indent) + ')';
+      }
+
+      function toJava(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'null';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return 'Arrays.asList(\n' + obj.map(function (v) { return pad(indent + 1) + toJava(v, indent + 1); }).join(",\n") + '\n' + pad(indent) + ')';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + 'Map.entry("' + String(k).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '", ' + toJava(obj[k], indent + 1) + ')');
+        return 'Map.ofEntries(\n' + out.join(",\n") + '\n' + pad(indent) + ')';
+      }
+
+      function toTypeScript(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'null';
+        if (typeof obj === 'string') return JSON.stringify(obj);
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return '[\n' + obj.map(function (v) { return pad(indent + 1) + toTypeScript(v, indent + 1); }).join(",\n") + '\n' + pad(indent) + ']';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : JSON.stringify(k)) + ': ' + toTypeScript(obj[k], indent + 1));
+        return '{\n' + out.join(",\n") + '\n' + pad(indent) + '}';
+      }
+
+      function toScala(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'null';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return 'List(\n' + obj.map(function (v) { return pad(indent + 1) + toScala(v, indent + 1); }).join(",\n") + '\n' + pad(indent) + ')';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '"' + String(k).replace(/"/g, '\\"') + '" -> ' + toScala(obj[k], indent + 1));
+        return 'Map(\n' + out.join(",\n") + '\n' + pad(indent) + ')';
+      }
+
+      function toR(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'NULL';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return obj === true ? 'TRUE' : obj === false ? 'FALSE' : String(obj);
+        if (Array.isArray(obj)) return 'list(\n' + obj.map(function (v) { return pad(indent + 1) + toR(v, indent + 1); }).join(",\n") + '\n' + pad(indent) + ')';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '"' + String(k).replace(/"/g, '\\"') + '" = ' + toR(obj[k], indent + 1));
+        return 'list(\n' + out.join(",\n") + '\n' + pad(indent) + ')';
+      }
+
+      function toElixir(obj, indent) {
+        indent = indent || 0;
+        var pad = function (n) { return '  '.repeat(n); };
+        if (obj === null) return 'nil';
+        if (typeof obj === 'string') return '"' + String(obj).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
+        if (Array.isArray(obj)) return '[\n' + obj.map(function (v) { return pad(indent + 1) + toElixir(v, indent + 1); }).join(",\n") + '\n' + pad(indent) + ']';
+        var out = [];
+        for (var k in obj) if (Object.prototype.hasOwnProperty.call(obj, k)) out.push(pad(indent + 1) + '"' + String(k).replace(/"/g, '\\"') + '" => ' + toElixir(obj[k], indent + 1));
+        return '%{\n' + out.join(",\n") + '\n' + pad(indent) + '}';
+      }
+
+      function convert() {
+        var raw = input.value.trim();
+        if (!raw) {
+          result.style.display = 'none';
+          parseError.style.display = 'none';
+          return;
+        }
+        var fromFormat = inputFormatSelect.value;
+        var parsed = parseInput(raw, fromFormat === 'auto' ? undefined : fromFormat);
+        if (parsed.obj === null && parsed.format === null) {
+          result.style.display = 'none';
+          parseError.style.display = 'block';
+          parseError.textContent = 'Could not parse input as JSON, XML, or array.';
+          return;
+        }
+        var outFormat = formatSelect.value;
+        var outText = '';
+        try {
+          switch (outFormat) {
+            case 'json':
+              outText = JSON.stringify(parsed.obj, null, 2);
+              break;
+            case 'xml':
+              outText = '<?xml version="1.0" encoding="UTF-8"?>\n' + objToXml(parsed.obj, 'root', 0);
+              break;
+            case 'php':
+              outText = '<?php\n$data = ' + toPhp(parsed.obj) + ';\n';
+              break;
+            case 'js':
+              outText = toJs(parsed.obj);
+              break;
+            case 'typescript':
+              outText = toTypeScript(parsed.obj);
+              break;
+            case 'python':
+              outText = toPython(parsed.obj);
+              break;
+            case 'ruby':
+              outText = toRuby(parsed.obj);
+              break;
+            case 'rust':
+              outText = toRust(parsed.obj);
+              break;
+            case 'go':
+              outText = toGo(parsed.obj);
+              break;
+            case 'java':
+              outText = toJava(parsed.obj);
+              break;
+            case 'csharp':
+              outText = toCSharp(parsed.obj);
+              break;
+            case 'kotlin':
+              outText = toKotlin(parsed.obj);
+              break;
+            case 'swift':
+              outText = toSwift(parsed.obj);
+              break;
+            case 'scala':
+              outText = toScala(parsed.obj);
+              break;
+            case 'r':
+              outText = toR(parsed.obj);
+              break;
+            case 'elixir':
+              outText = toElixir(parsed.obj);
+              break;
+            case 'lua':
+              outText = toLua(parsed.obj);
+              break;
+            case 'yaml':
+              outText = toYaml(parsed.obj);
+              break;
+            default:
+              outText = JSON.stringify(parsed.obj, null, 2);
+          }
+          parseError.style.display = 'none';
+          result.style.display = 'block';
+          outputPre.textContent = outText;
+        } catch (e) {
+          result.style.display = 'none';
+          parseError.style.display = 'block';
+          parseError.textContent = 'Convert error: ' + (e.message || String(e));
+        }
+      }
+
+      inputFormatSelect.addEventListener('change', pushQuery);
+      formatSelect.addEventListener('change', pushQuery);
+
+      document.getElementById('detectBtn').onclick = detectInputFormat;
+      document.getElementById('convertBtn').onclick = convert;
+      document.getElementById('clearBtn').onclick = function () {
+        input.value = '';
+        result.style.display = 'none';
+        parseError.style.display = 'none';
+      };
+
+      document.getElementById('copyBtn').onclick = function () {
+        var text = outputPre.textContent;
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(function () {
+          var btn = document.getElementById('copyBtn');
+          var t = btn.textContent;
+          btn.textContent = 'Copied!';
+          btn.disabled = true;
+          setTimeout(function () { btn.textContent = t; btn.disabled = false; }, 1500);
+        });
+      };
+    })();
+  </script>
+</body>
+</html>
