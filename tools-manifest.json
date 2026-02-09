@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T00:43:10.737Z",
+  "generatedAt": "2026-02-09T00:51:36.040Z",
   "categories": [
     "Text",
     "Encoding",
@@ -38,6 +38,22 @@
         "naming"
       ],
       "order": 2,
+      "icon": "🔀"
+    },
+    {
+      "id": "diff-checker",
+      "path": "tools/diff-checker/",
+      "name": "Diff checker",
+      "category": "Text",
+      "description": "Text A vs Text B — visual diff to quickly find differences between two texts",
+      "keywords": [
+        "diff",
+        "compare",
+        "text",
+        "difference",
+        "merge"
+      ],
+      "order": 3,
       "icon": "🔀"
     },
     {
@@ -140,6 +156,24 @@
       ],
       "order": 4,
       "icon": "📡"
+    },
+    {
+      "id": "port-lookup",
+      "path": "tools/port-lookup/",
+      "name": "Port number lookup",
+      "category": "Web",
+      "description": "Look up port numbers: 443 → HTTPS, with description and common usage for each",
+      "keywords": [
+        "port",
+        "tcp",
+        "udp",
+        "https",
+        "dns",
+        "lookup",
+        "service"
+      ],
+      "order": 5,
+      "icon": "🔌"
     },
     {
       "id": "time-converter",

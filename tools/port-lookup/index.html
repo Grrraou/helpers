@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port number lookup</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input { -webkit-user-select: text; user-select: text; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; }
+    input[type="text"] { font-size: 0.95rem; padding: 0.5rem; width: 100%; max-width: 20rem; border: 1px solid #ccc; border-radius: 4px; }
+    input[type="text"]:focus { outline: none; border-color: #1a73e8; }
+    .row { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .table-wrap { border: 1px solid #e0e0e0; border-radius: 6px; overflow: auto; max-height: 65vh; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #eee; vertical-align: top; }
+    th { position: sticky; top: 0; background: #f5f5f5; font-weight: 600; color: #333; z-index: 1; }
+    tr:hover td { background: #fafafa; }
+    .port { font-family: ui-monospace, monospace; font-weight: 600; white-space: nowrap; width: 1%; }
+    .name { font-weight: 500; }
+    .desc, .usage { color: #555; font-size: 0.88rem; line-height: 1.4; }
+    .usage { color: #666; font-size: 0.85rem; margin-top: 0.2rem; }
+    .count { font-size: 0.85rem; color: #666; margin-left: 0.5rem; }
+    .no-results { padding: 1.5rem; color: #666; text-align: center; }
+    .filter-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="filter-row">
+      <label for="search" style="margin-bottom: 0;">Search</label>
+      <input type="text" id="search" placeholder="Port (e.g. 443) or service name (e.g. HTTPS)…" aria-label="Search ports" autocomplete="off" />
+      <span class="count" id="count"></span>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Port</th><th>Service</th><th>Description</th><th>Common usage</th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <p id="noResults" class="no-results" style="display: none;">No matching ports.</p>
+  </div>
+
+  <script>
+    (function () {
+      var PORTS = [
+        { port: 7, name: 'Echo', desc: 'Echo protocol.', usage: 'Echoes back received data; used for connectivity testing.' },
+        { port: 9, name: 'Discard', desc: 'Discard protocol.', usage: 'Accepts and discards input; sometimes used for bandwidth tests.' },
+        { port: 20, name: 'FTP-DATA', desc: 'File Transfer Protocol (data connection).', usage: 'Active FTP: server connects back to client on this port for file transfer.' },
+        { port: 21, name: 'FTP', desc: 'File Transfer Protocol (control connection).', usage: 'Legacy file upload/download; often replaced by SFTP (22) or HTTPS.' },
+        { port: 22, name: 'SSH', desc: 'Secure Shell.', usage: 'Remote login, command execution, SFTP, and tunnelling; standard for server admin and Git.' },
+        { port: 23, name: 'Telnet', desc: 'Unencrypted remote terminal protocol.', usage: 'Legacy remote login; avoid on untrusted networks (use SSH instead).' },
+        { port: 25, name: 'SMTP', desc: 'Simple Mail Transfer Protocol.', usage: 'Server-to-server email delivery; submission often uses 587.' },
+        { port: 37, name: 'Time', desc: 'Time Protocol.', usage: 'Returns current time as 32-bit; largely superseded by NTP (123).' },
+        { port: 42, name: 'Nameserver', desc: 'Host Name Server (obsolete).', usage: 'Legacy name lookup; replaced by DNS (53).' },
+        { port: 43, name: 'Whois', desc: 'WHOIS protocol.', usage: 'Query domain and IP registration information.' },
+        { port: 53, name: 'DNS', desc: 'Domain Name System.', usage: 'Resolving domain names to IP addresses; used by every device on the internet.' },
+        { port: 67, name: 'DHCP (server)', desc: 'Dynamic Host Configuration Protocol.', usage: 'Server listens here; assigns IP addresses to clients (e.g. router).' },
+        { port: 68, name: 'DHCP (client)', desc: 'DHCP client.', usage: 'Client uses this port to receive lease from DHCP server.' },
+        { port: 69, name: 'TFTP', desc: 'Trivial File Transfer Protocol.', usage: 'Simple unauthenticated file transfer; used for PXE boot, firmware.' },
+        { port: 79, name: 'Finger', desc: 'Finger protocol.', usage: 'User information lookup; rarely used and often disabled for security.' },
+        { port: 80, name: 'HTTP', desc: 'Hypertext Transfer Protocol.', usage: 'Unencrypted web traffic; browsers often redirect to HTTPS (443).' },
+        { port: 88, name: 'Kerberos', desc: 'Kerberos authentication.', usage: 'Network authentication in Windows and enterprise environments.' },
+        { port: 110, name: 'POP3', desc: 'Post Office Protocol version 3.', usage: 'Downloading email from a server to a client (e.g. mail app).' },
+        { port: 111, name: 'RPC', desc: 'Sun RPC / portmapper.', usage: 'Maps RPC program numbers to ports; used by NFS and NIS.' },
+        { port: 115, name: 'SFTP', desc: 'Simple File Transfer Protocol.', usage: 'Legacy protocol; not the same as SSH File Transfer (over port 22).' },
+        { port: 123, name: 'NTP', desc: 'Network Time Protocol.', usage: 'Synchronising clocks between computers; critical for logging and certificates.' },
+        { port: 137, name: 'NetBIOS-NS', desc: 'NetBIOS Name Service.', usage: 'Windows name resolution (hostname to IP) on local network.' },
+        { port: 138, name: 'NetBIOS-DGM', desc: 'NetBIOS Datagram Service.', usage: 'NetBIOS broadcast and name registration.' },
+        { port: 139, name: 'NetBIOS-SSN', desc: 'NetBIOS Session Service.', usage: 'Windows file/printer sharing (SMB) over NetBIOS.' },
+        { port: 143, name: 'IMAP', desc: 'Internet Message Access Protocol.', usage: 'Accessing and managing email on the server; keeps mail in sync across devices.' },
+        { port: 161, name: 'SNMP', desc: 'Simple Network Management Protocol.', usage: 'Monitoring and managing network devices (routers, switches, servers).' },
+        { port: 162, name: 'SNMP-trap', desc: 'SNMP trap messages.', usage: 'Agents send traps to managers on this port.' },
+        { port: 194, name: 'IRC', desc: 'Internet Relay Chat.', usage: 'Real-time text chat; many communities and bot networks.' },
+        { port: 389, name: 'LDAP', desc: 'Lightweight Directory Access Protocol.', usage: 'Directory services: user/group lookup, auth (e.g. Active Directory).' },
+        { port: 443, name: 'HTTPS', desc: 'HTTP over TLS/SSL.', usage: 'Encrypted web traffic; standard for websites, APIs, and secure login.' },
+        { port: 445, name: 'SMB', desc: 'Server Message Block (direct).', usage: 'Windows file and printer sharing; also used by Samba on Linux.' },
+        { port: 464, name: 'Kerberos (pw)', desc: 'Kerberos password change.', usage: 'Kerberos kpasswd service.' },
+        { port: 465, name: 'SMTPS', desc: 'SMTP over SSL (legacy).', usage: 'Encrypted mail submission; deprecated in favour of STARTTLS on 587.' },
+        { port: 500, name: 'IKE', desc: 'Internet Key Exchange.', usage: 'IPsec VPN key negotiation (phase 1).' },
+        { port: 514, name: 'Syslog', desc: 'Syslog (UDP) / rsh (TCP).', usage: 'UDP: centralised log collection; TCP: remote shell (legacy).' },
+        { port: 515, name: 'LPD', desc: 'Line Printer Daemon.', usage: 'Legacy network printing.' },
+        { port: 520, name: 'RIP', desc: 'Routing Information Protocol.', usage: 'Interior gateway routing protocol.' },
+        { port: 548, name: 'AFP', desc: 'Apple Filing Protocol.', usage: 'Classic Mac file sharing; modern Macs use SMB.' },
+        { port: 554, name: 'RTSP', desc: 'Real Time Streaming Protocol.', usage: 'Control for streaming media (e.g. IP cameras).' },
+        { port: 563, name: 'NNTPS', desc: 'NNTP over TLS.', usage: 'Encrypted Usenet news access.' },
+        { port: 587, name: 'SMTP (submission)', desc: 'Mail submission with STARTTLS.', usage: 'Preferred port for sending email from clients (MUAs) to mail servers.' },
+        { port: 636, name: 'LDAPS', desc: 'LDAP over SSL/TLS.', usage: 'Encrypted directory access.' },
+        { port: 631, name: 'IPP', desc: 'Internet Printing Protocol.', usage: 'Network printing; often over HTTP.' },
+        { port: 636, name: 'LDAPS', desc: 'LDAP over SSL/TLS.', usage: 'Encrypted directory access.' },
+        { port: 873, name: 'rsync', desc: 'rsync file sync.', usage: 'Efficient file transfer and mirroring; backup and deploy.' },
+        { port: 902, name: 'VMware Server', desc: 'VMware management.', usage: 'VMware ESXi and related management console.' },
+        { port: 989, name: 'FTPS-DATA', desc: 'FTP over TLS (data).', usage: 'Data channel for FTPS.' },
+        { port: 990, name: 'FTPS', desc: 'FTP over TLS (control).', usage: 'Encrypted FTP control connection.' },
+        { port: 993, name: 'IMAPS', desc: 'IMAP over SSL/TLS.', usage: 'Encrypted email access; used by mail clients for secure inbox sync.' },
+        { port: 995, name: 'POP3S', desc: 'POP3 over SSL/TLS.', usage: 'Encrypted email download from server to client.' },
+        { port: 1080, name: 'SOCKS', desc: 'SOCKS proxy.', usage: 'Generic TCP proxy; used by many apps for tunnelling.' },
+        { port: 1194, name: 'OpenVPN', desc: 'OpenVPN.', usage: 'Common default for OpenVPN VPN tunnels.' },
+        { port: 1433, name: 'MSSQL', desc: 'Microsoft SQL Server.', usage: 'Default port for SQL Server database connections.' },
+        { port: 1521, name: 'Oracle', desc: 'Oracle Database listener.', usage: 'Default port for Oracle DB connections.' },
+        { port: 1723, name: 'PPTP', desc: 'Point-to-Point Tunnelling Protocol.', usage: 'Legacy VPN; less secure, often blocked.' },
+        { port: 1883, name: 'MQTT', desc: 'MQ Telemetry Transport.', usage: 'Lightweight pub/sub messaging; IoT and sensors.' },
+        { port: 1900, name: 'SSDP', desc: 'Simple Service Discovery / UPnP.', usage: 'Device discovery on local network (UPnP).' },
+        { port: 2049, name: 'NFS', desc: 'Network File System.', usage: 'Sharing files between Unix/Linux systems over the network.' },
+        { port: 2082, name: 'cPanel', desc: 'cPanel (HTTP).', usage: 'cPanel web hosting control panel.' },
+        { port: 2083, name: 'cPanel', desc: 'cPanel (HTTPS).', usage: 'cPanel over TLS.' },
+        { port: 2181, name: 'Zookeeper', desc: 'Apache ZooKeeper.', usage: 'Distributed coordination for Kafka, Hadoop, etc.' },
+        { port: 2375, name: 'Docker', desc: 'Docker API (unencrypted).', usage: 'Docker daemon API; use 2376 with TLS in production.' },
+        { port: 2376, name: 'Docker', desc: 'Docker API (TLS).', usage: 'Secure Docker daemon API.' },
+        { port: 2628, name: 'DICT', desc: 'DICT dictionary protocol.', usage: 'Network dictionary lookup.' },
+        { port: 3000, name: 'Dev (common)', desc: 'Common dev server port.', usage: 'Node, React dev server, Rails, many frameworks.' },
+        { port: 3128, name: 'Squid', desc: 'Squid proxy.', usage: 'HTTP caching proxy; often used as forward proxy.' },
+        { port: 3268, name: 'LDAP GC', desc: 'LDAP Global Catalog.', usage: 'Active Directory global catalog (Windows).' },
+        { port: 3306, name: 'MySQL', desc: 'MySQL / MariaDB database.', usage: 'Default port for MySQL and compatible database clients.' },
+        { port: 3389, name: 'RDP', desc: 'Remote Desktop Protocol.', usage: 'Windows Remote Desktop; graphical login to Windows machines.' },
+        { port: 3689, name: 'DAAP', desc: 'Digital Audio Access Protocol.', usage: 'iTunes music sharing.' },
+        { port: 4369, name: 'Erlang', desc: 'Erlang Port Mapper.', usage: 'Used by RabbitMQ, CouchDB, and other Erlang apps.' },
+        { port: 5000, name: 'UPnP / dev', desc: 'UPnP or dev server.', usage: 'UPnP control or Flask/other dev servers.' },
+        { port: 5001, name: 'Synology', desc: 'Synology DSM (HTTPS).', usage: 'Synology NAS web interface.' },
+        { port: 5060, name: 'SIP', desc: 'Session Initiation Protocol.', usage: 'VoIP signalling; call setup and teardown.' },
+        { port: 5061, name: 'SIPS', desc: 'SIP over TLS.', usage: 'Encrypted VoIP signalling.' },
+        { port: 5432, name: 'PostgreSQL', desc: 'PostgreSQL database.', usage: 'Default port for PostgreSQL client connections.' },
+        { port: 5672, name: 'AMQP', desc: 'Advanced Message Queuing Protocol.', usage: 'RabbitMQ default port; message broker.' },
+        { port: 5900, name: 'VNC', desc: 'Virtual Network Computing.', usage: 'Remote desktop / screen sharing; 5900+n for display n.' },
+        { port: 5984, name: 'CouchDB', desc: 'Apache CouchDB.', usage: 'RESTful document database; HTTP API.' },
+        { port: 6000, name: 'X11', desc: 'X Window System.', usage: 'Display 0; SSH X forwarding uses 6010+.' },
+        { port: 6379, name: 'Redis', desc: 'Redis in-memory store.', usage: 'Default port for Redis cache, session store, and message broker.' },
+        { port: 6443, name: 'Kubernetes API', desc: 'Kubernetes API server (HTTPS).', usage: 'kubectl and cluster components talk to the API on this port.' },
+        { port: 6444, name: 'Kubernetes', desc: 'Kubelet read-only.', usage: 'Kubernetes kubelet API (read-only).' },
+        { port: 6667, name: 'IRC', desc: 'IRC (default).', usage: 'Default port for IRC servers.' },
+        { port: 6881, name: 'BitTorrent', desc: 'BitTorrent (often).', usage: 'Common port range for BitTorrent clients.' },
+        { port: 7001, name: 'AFS', desc: 'Andrew File System.', usage: 'Distributed file system (e.g. in academia).' },
+        { port: 7199, name: 'Cassandra', desc: 'Cassandra JMX.', usage: 'Cassandra monitoring and management.' },
+        { port: 8000, name: 'HTTP (alt)', desc: 'Alternative HTTP.', usage: 'Django, many dev servers, internal apps.' },
+        { port: 8008, name: 'HTTP (alt)', desc: 'Alternative HTTP.', usage: 'Google alternative HTTP; some proxies.' },
+        { port: 8009, name: 'Tomcat AJP', desc: 'Apache JServ Protocol.', usage: 'Tomcat connector for Apache/mod_proxy.' },
+        { port: 8010, name: 'HTTP (alt)', desc: 'Alternative HTTP.', usage: 'Internal or dev services.' },
+        { port: 8080, name: 'HTTP (alt)', desc: 'Alternative HTTP port.', usage: 'Common for dev servers, proxies, and apps avoiding port 80.' },
+        { port: 8081, name: 'HTTP (alt)', desc: 'Alternative HTTP.', usage: 'Secondary web app or proxy.' },
+        { port: 8443, name: 'HTTPS (alt)', desc: 'Alternative HTTPS port.', usage: 'Dev or internal HTTPS when 443 is used elsewhere.' },
+        { port: 8888, name: 'HTTP (alt)', desc: 'Alternative HTTP port.', usage: 'Jupyter Notebook and some dev tools by default.' },
+        { port: 9000, name: 'PHP-FPM / Sonar', desc: 'PHP-FPM or SonarQube.', usage: 'PHP-FPM (proxied by nginx) or SonarQube.' },
+        { port: 9042, name: 'Cassandra', desc: 'Apache Cassandra.', usage: 'Default port for Cassandra CQL client.' },
+        { port: 9092, name: 'Kafka', desc: 'Apache Kafka.', usage: 'Kafka broker default port.' },
+        { port: 9100, name: 'Prometheus', desc: 'Prometheus node exporter.', usage: 'Metrics export for Prometheus scraping.' },
+        { port: 9200, name: 'Elasticsearch', desc: 'Elasticsearch REST API.', usage: 'Default HTTP port for Elasticsearch search/analytics engine.' },
+        { port: 9300, name: 'Elasticsearch', desc: 'Elasticsearch transport.', usage: 'Node-to-node and Java client transport.' },
+        { port: 9418, name: 'Git', desc: 'Git daemon.', usage: 'Git protocol (read-only); often used for serving repos.' },
+        { port: 11211, name: 'Memcached', desc: 'Memcached.', usage: 'In-memory key-value cache.' },
+        { port: 27017, name: 'MongoDB', desc: 'MongoDB database.', usage: 'Default port for MongoDB client connections.' },
+        { port: 27018, name: 'MongoDB', desc: 'MongoDB shards.', usage: 'MongoDB shard server (in sharded clusters).' },
+        { port: 32400, name: 'Plex', desc: 'Plex Media Server.', usage: 'Plex media server HTTP API.' },
+        { port: 35357, name: 'Keystone', desc: 'OpenStack Keystone (admin).', usage: 'OpenStack identity service admin API.' },
+        { port: 50000, name: 'DB2', desc: 'IBM DB2 database.', usage: 'DB2 client-server communication.' },
+        { port: 50070, name: 'Hadoop HDFS', desc: 'Hadoop HDFS NameNode (HTTP).', usage: 'HDFS NameNode web UI (older Hadoop).' },
+        { port: 54321, name: 'Hadoop', desc: 'Hadoop (various).', usage: 'Some Hadoop services.' },
+        { port: 61616, name: 'ActiveMQ', desc: 'Apache ActiveMQ.', usage: 'ActiveMQ OpenWire (JMS) default.' }
+      ];
+
+      var searchInput = document.getElementById('search');
+      var tbody = document.getElementById('tbody');
+      var countEl = document.getElementById('count');
+      var noResults = document.getElementById('noResults');
+
+      function render() {
+        var q = (searchInput.value || '').trim().toLowerCase();
+        var filtered = PORTS.filter(function (item) {
+          if (!q) return true;
+          var portStr = String(item.port);
+          var name = item.name.toLowerCase();
+          var desc = (item.desc || '').toLowerCase();
+          var usage = (item.usage || '').toLowerCase();
+          return portStr.indexOf(q) !== -1 || name.indexOf(q) !== -1 || desc.indexOf(q) !== -1 || usage.indexOf(q) !== -1;
+        });
+        tbody.innerHTML = '';
+        noResults.style.display = 'none';
+        if (filtered.length === 0) {
+          noResults.style.display = 'block';
+          countEl.textContent = '';
+          return;
+        }
+        countEl.textContent = filtered.length + ' of ' + PORTS.length;
+        filtered.forEach(function (item) {
+          var tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td class="port">' + escapeHtml(String(item.port)) + '</td>' +
+            '<td class="name">' + escapeHtml(item.name) + '</td>' +
+            '<td class="desc">' + escapeHtml(item.desc) + '</td>' +
+            '<td class="usage">' + escapeHtml(item.usage) + '</td>';
+          tbody.appendChild(tr);
+        });
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      searchInput.addEventListener('input', render);
+      searchInput.addEventListener('keyup', render);
+      render();
+
+      var params = new URLSearchParams(window.location.search);
+      var p = params.get('p') || params.get('port');
+      if (p != null && p !== '') {
+        searchInput.value = p.trim();
+        render();
+      }
+    })();
+  </script>
+</body>
+</html>

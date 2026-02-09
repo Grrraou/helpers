@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diff checker</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, textarea { -webkit-user-select: text; user-select: text; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; }
+    textarea { width: 100%; min-height: 120px; font-family: ui-monospace, monospace; font-size: 0.875rem; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+    textarea:focus { outline: none; border-color: #1a73e8; }
+    .row { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .half { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 640px) { .half { grid-template-columns: 1fr; } }
+    button { font: inherit; padding: 0.5rem 1rem; margin: 0.25rem 0.25rem 0 0; cursor: pointer; }
+    .diff-wrap { margin-top: 1rem; border: 1px solid #e0e0e0; border-radius: 6px; overflow: auto; max-height: 55vh; background: #fafafa; }
+    .diff-inner { padding: 0.75rem; font-family: ui-monospace, monospace; font-size: 0.875rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+    .diff-line { display: block; padding: 0.1rem 0.35rem; margin: 0 -0.35rem; border-radius: 2px; }
+    .diff-remove { background: #ffebee; color: #b71c1c; }
+    .diff-add { background: #e8f5e9; color: #1b5e20; }
+    .diff-same { color: #333; }
+    .diff-line-num { display: inline-block; min-width: 4em; margin-right: 0.75rem; color: #999; font-size: 0.8em; user-select: none; }
+    .legend { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.8rem; color: #666; }
+    .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .legend .swatch-remove { display: inline-block; width: 12px; height: 12px; background: #ffebee; border-radius: 2px; }
+    .legend .swatch-add { display: inline-block; width: 12px; height: 12px; background: #e8f5e9; border-radius: 2px; }
+    .empty-diff { color: #888; padding: 1rem; text-align: center; }
+    .diff-search-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .diff-search-row input { font-size: 0.9rem; padding: 0.4rem 0.6rem; width: 100%; max-width: 20rem; border: 1px solid #ccc; border-radius: 4px; }
+    .diff-search-row input:focus { outline: none; border-color: #1a73e8; }
+    .diff-search-row .diff-count { font-size: 0.8rem; color: #666; }
+    .diff-line.diff-hidden { display: none; }
+    .diff-line .diff-hit { background: #ffeb3b; padding: 0 2px; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="half">
+      <div>
+        <label for="textA">Text A</label>
+        <textarea id="textA" placeholder="Paste or type first text…" aria-label="Text A"></textarea>
+      </div>
+      <div>
+        <label for="textB">Text B</label>
+        <textarea id="textB" placeholder="Paste or type second text…" aria-label="Text B"></textarea>
+      </div>
+    </div>
+  </div>
+  <button type="button" id="compare">Compare</button>
+  <button type="button" id="clear">Clear</button>
+  <div class="legend">
+    <span><span class="swatch-remove"></span> Removed (in A only)</span>
+    <span><span class="swatch-add"></span> Added (in B only)</span>
+  </div>
+  <div id="diffOut" style="display: none;">
+    <div class="diff-search-row">
+      <label for="diffSearch" style="margin-bottom: 0;">Search in results</label>
+      <input type="text" id="diffSearch" placeholder="Filter lines…" aria-label="Search in diff results" autocomplete="off" />
+      <span class="diff-count" id="diffCount"></span>
+    </div>
+    <div class="diff-wrap">
+      <div class="diff-inner" id="diffInner"></div>
+    </div>
+  </div>
+  <div id="emptyDiff" class="empty-diff" style="display: none;">Enter text in A and B, then click Compare to see differences.</div>
+
+  <script>
+    (function () {
+      var textA = document.getElementById('textA');
+      var textB = document.getElementById('textB');
+      var compareBtn = document.getElementById('compare');
+      var clearBtn = document.getElementById('clear');
+      var diffOut = document.getElementById('diffOut');
+      var diffInner = document.getElementById('diffInner');
+      var emptyDiff = document.getElementById('emptyDiff');
+      var diffSearch = document.getElementById('diffSearch');
+      var diffCount = document.getElementById('diffCount');
+      var lastDiff = [];
+
+      function lineDiff(linesA, linesB) {
+        var n = linesA.length;
+        var m = linesB.length;
+        if (n === 0 && m === 0) return [];
+        var dp = [];
+        for (var i = 0; i <= n; i++) {
+          dp[i] = [];
+          for (var j = 0; j <= m; j++) {
+            if (i === 0 || j === 0) dp[i][j] = 0;
+            else if (linesA[i - 1] === linesB[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+            else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+          }
+        }
+        var result = [];
+        var i = n, j = m;
+        while (i > 0 || j > 0) {
+          if (i > 0 && j > 0 && linesA[i - 1] === linesB[j - 1]) {
+            result.push({ type: 'same', line: linesA[i - 1], numA: i, numB: j });
+            i--;
+            j--;
+          } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+            result.push({ type: 'add', line: linesB[j - 1], numB: j });
+            j--;
+          } else {
+            result.push({ type: 'remove', line: linesA[i - 1], numA: i });
+            i--;
+          }
+        }
+        result.reverse();
+        return result;
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function highlightMatch(text, q) {
+        if (!q) return escapeHtml(text);
+        var re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + ')', 'gi');
+        var out = '';
+        var last = 0;
+        var match;
+        while ((match = re.exec(text)) !== null) {
+          out += escapeHtml(text.slice(last, match.index)) + '<span class="diff-hit">' + escapeHtml(match[1]) + '</span>';
+          last = match.index + match[1].length;
+        }
+        out += escapeHtml(text.slice(last));
+        return out;
+      }
+
+      function renderDiff() {
+        var q = (diffSearch.value || '').trim().toLowerCase();
+        var list = lastDiff;
+        if (q) list = lastDiff.filter(function (item) { return item.line.toLowerCase().indexOf(q) !== -1; });
+        var html = '';
+        list.forEach(function (item) {
+          var cls = item.type === 'remove' ? 'diff-remove' : item.type === 'add' ? 'diff-add' : 'diff-same';
+          var numStr = '';
+          if (item.type === 'same') numStr = (item.numA != null ? item.numA : '') + ':' + (item.numB != null ? item.numB : '');
+          else if (item.type === 'remove') numStr = String(item.numA != null ? item.numA : '');
+          else numStr = String(item.numB != null ? item.numB : '');
+          var num = '<span class="diff-line-num">' + numStr + '</span>';
+          var prefix = item.type === 'remove' ? '− ' : item.type === 'add' ? '+ ' : '  ';
+          html += '<div class="diff-line ' + cls + '">' + num + prefix + highlightMatch(item.line, q) + '</div>';
+        });
+        diffInner.innerHTML = html || '<div class="diff-same diff-line">(no matching lines)</div>';
+        diffCount.textContent = q && lastDiff.length > 0 ? 'Showing ' + list.length + ' of ' + lastDiff.length + ' lines' : '';
+      }
+
+      function run() {
+        var a = (textA.value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        var b = (textB.value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        var linesA = a.split('\n');
+        var linesB = b.split('\n');
+        var diff = lineDiff(linesA, linesB);
+        if (diff.length === 0 && linesA.length === 0 && linesB.length === 0) {
+          diffOut.style.display = 'none';
+          emptyDiff.style.display = 'block';
+          return;
+        }
+        emptyDiff.style.display = 'none';
+        diffOut.style.display = 'block';
+        lastDiff = diff;
+        diffSearch.value = '';
+        renderDiff();
+      }
+
+      var runTimeout = null;
+      function scheduleRun() {
+        if (runTimeout) clearTimeout(runTimeout);
+        runTimeout = setTimeout(function () { runTimeout = null; run(); }, 350);
+      }
+      compareBtn.addEventListener('click', run);
+      clearBtn.addEventListener('click', function () {
+        textA.value = '';
+        textB.value = '';
+        diffOut.style.display = 'none';
+        emptyDiff.style.display = 'block';
+      });
+      textA.addEventListener('input', scheduleRun);
+      textB.addEventListener('input', scheduleRun);
+      diffSearch.addEventListener('input', renderDiff);
+      diffSearch.addEventListener('keyup', renderDiff);
+
+      var params = new URLSearchParams(window.location.search);
+      var aParam = params.get('a');
+      var bParam = params.get('b');
+      if (aParam != null) textA.value = aParam.replace(/\+/g, ' ');
+      if (bParam != null) textB.value = bParam.replace(/\+/g, ' ');
+      if (aParam != null || bParam != null) run();
+    })();
+  </script>
+</body>
+</html>
