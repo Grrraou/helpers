@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Distance converter</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, select { -webkit-user-select: text; user-select: text; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; font-size: 0.95rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
+    h2 { font-size: 1rem; margin: 1.25rem 0 0.5rem 0; color: #333; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .row { margin-bottom: 1rem; }
+    input[type="text"], select { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    input:focus, select:focus { outline: none; border-color: #1a73e8; }
+    .input-row { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+    .input-row input { width: 10rem; font-family: ui-monospace, monospace; }
+    .output-section { margin-top: 1.25rem; }
+    .output-group { margin-bottom: 1rem; }
+    .output-group h3 { font-size: 0.8rem; text-transform: uppercase; color: #666; margin: 0 0 0.5rem 0; }
+    .output-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; }
+    .output-item { background: #f5f5f5; border-radius: 6px; padding: 0.5rem 0.65rem; }
+    .output-item .unit { font-size: 0.75rem; color: #666; }
+    .output-item .value { font-family: ui-monospace, monospace; font-size: 0.95rem; word-break: break-all; }
+    .output-item .value.empty { color: #999; }
+    .output-item .value.error { color: #c00; }
+    .explain { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e0e0e0; }
+    .explain h2 { margin-top: 0; }
+    .explain-block { background: #f8f9fa; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; font-size: 0.9rem; line-height: 1.5; }
+    .explain-block h4 { margin: 0 0 0.35rem 0; font-size: 0.9rem; }
+    .explain-block p { margin: 0; color: #444; }
+    .explain-block p + p { margin-top: 0.35rem; }
+    .explain-table { width: 100%; max-width: 42rem; border-collapse: collapse; font-size: 0.88rem; margin-top: 0.5rem; }
+    .explain-table th, .explain-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; vertical-align: top; }
+    .explain-table th { color: #666; font-weight: 600; }
+    .explain-table .unit-name { font-family: ui-monospace, monospace; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <h1>Distance converter</h1>
+  <p style="margin: 0 0 1rem 0; font-size: 0.9rem; color: #555;">Convert between metric, imperial (US/UK), and astronomical distance units.</p>
+  <div class="row">
+    <label for="input">Distance</label>
+    <div class="input-row">
+      <input type="text" id="input" placeholder="e.g. 1.5 or 93e6" inputmode="decimal" autocomplete="off" />
+      <select id="fromUnit"></select>
+    </div>
+  </div>
+
+  <div class="output-section" id="outputSection"></div>
+
+  <section class="explain" id="explainSection">
+    <h2>About these units</h2>
+
+    <div class="explain-block">
+      <h4>Metric (SI)</h4>
+      <p>Based on the <strong>metre (m)</strong>, the SI base unit of length. Multiples and submultiples use powers of 10: nanometre (nm), micrometre (µm), millimetre (mm), centimetre (cm), metre (m), kilometre (km). Used worldwide in science, engineering, and most countries for everyday distances. The metre was originally defined from the Earth’s circumference; today it’s defined from the speed of light.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Imperial and US customary</h4>
+      <p><strong>Inch (in)</strong>, <strong>foot (ft)</strong>, <strong>yard (yd)</strong>, and <strong>mile (mi)</strong> are still used in the US, UK, and a few other places for everyday use (road signs, height, short distances). The <strong>nautical mile (nmi)</strong> is exactly 1,852 m by international agreement; it equals one minute of latitude and is used in aviation and shipping. US and UK “statute” miles are the same (1,609.344 m).</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Astronomical scales</h4>
+      <p><strong>Astronomical unit (AU)</strong> — mean distance from Earth to the Sun (~149.6 million km). Used for distances within the Solar System (e.g. Mars ~1.5 AU).</p>
+      <p><strong>Light-second (ls), light-minute (lm)</strong> — distance light travels in 1 second or 1 minute in a vacuum. Handy for inner Solar System (Earth–Moon ~1.3 ls, Earth–Sun ~8.3 lm).</p>
+      <p><strong>Light-year (ly)</strong> — distance light travels in one Julian year (~9.46 trillion km). Used for stellar and galactic distances (e.g. nearest star ~4.2 ly).</p>
+      <p><strong>Parsec (pc)</strong> — about 3.26 light-years. One parsec is the distance at which 1 AU subtends 1 arcsecond. Used in professional astronomy (e.g. “parallax in parsecs”).</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Unit reference</h4>
+      <table class="explain-table" id="explainTable"></table>
+    </div>
+  </section>
+
+  <script>
+(function () {
+  var M = 1;
+  var C = 299792458;
+  var SEC_PER_DAY = 86400;
+  var DAYS_PER_YEAR = 365.25;
+  var LIGHT_SEC = C;
+  var LIGHT_MIN = C * 60;
+  var LIGHT_YEAR = C * SEC_PER_DAY * DAYS_PER_YEAR;
+  var AU_M = 149597870700;
+  var PC_M = AU_M * (648000 / Math.PI);
+
+  var UNITS = [
+    { id: 'nm', label: 'Nanometres (nm)', metersPerUnit: 1e-9, group: 'metric', name: 'Nanometre', explain: '10⁻⁹ m. Wavelengths of light, chip features, atoms. Common in physics and nanotech.' },
+    { id: 'um', label: 'Micrometres (µm)', metersPerUnit: 1e-6, group: 'metric', name: 'Micrometre', explain: '10⁻⁶ m (micron). Cells, fibres, precision engineering. Often written µm or “micron”.' },
+    { id: 'mm', label: 'Millimetres (mm)', metersPerUnit: 1e-3, group: 'metric', name: 'Millimetre', explain: '10⁻³ m. Everyday small lengths: screws, raindrops, rulers.' },
+    { id: 'cm', label: 'Centimetres (cm)', metersPerUnit: 1e-2, group: 'metric', name: 'Centimetre', explain: '10⁻² m. Height of small objects, body measurements (e.g. 30 cm ruler).' },
+    { id: 'm', label: 'Metres (m)', metersPerUnit: M, group: 'metric', name: 'Metre', explain: 'SI base unit of length. Defined from the speed of light. Used for room size, sports, short distances.' },
+    { id: 'km', label: 'Kilometres (km)', metersPerUnit: 1e3, group: 'metric', name: 'Kilometre', explain: '1,000 m. Roads, running, geography. Standard for long distances in most of the world.' },
+
+    { id: 'in', label: 'Inches (in)', metersPerUnit: 0.0254, group: 'imperial', name: 'Inch', explain: 'Exactly 25.4 mm by definition. Screens, tyres, plumbing. 12 inches = 1 foot.' },
+    { id: 'ft', label: 'Feet (ft)', metersPerUnit: 0.3048, group: 'imperial', name: 'Foot', explain: '12 inches = 0.3048 m. Human height, room dimensions, aviation altitude (e.g. 35,000 ft).' },
+    { id: 'yd', label: 'Yards (yd)', metersPerUnit: 0.9144, group: 'imperial', name: 'Yard', explain: '3 feet = 0.9144 m. American football, fabric, short outdoor distances.' },
+    { id: 'mi', label: 'Miles (mi)', metersPerUnit: 1609.344, group: 'imperial', name: 'Mile (statute)', explain: '1,760 yards = 1,609.344 m. Road distances in the US and UK. “Statute mile” or “land mile”.' },
+    { id: 'nmi', label: 'Nautical miles (nmi)', metersPerUnit: 1852, group: 'imperial', name: 'Nautical mile', explain: 'Exactly 1,852 m by international definition. One minute of latitude. Aviation and maritime.' },
+
+    { id: 'ls', label: 'Light-seconds (ls)', metersPerUnit: LIGHT_SEC, group: 'astronomical', name: 'Light-second', explain: 'Distance light travels in 1 s in vacuum (~299,792 km). Earth–Moon ~1.3 ls.' },
+    { id: 'lm', label: 'Light-minutes (lm)', metersPerUnit: LIGHT_MIN, group: 'astronomical', name: 'Light-minute', explain: 'Distance light travels in 1 minute. Earth–Sun ~8.3 light-minutes.' },
+    { id: 'AU', label: 'Astronomical units (AU)', metersPerUnit: AU_M, group: 'astronomical', name: 'Astronomical unit', explain: 'Mean Earth–Sun distance (~149.6 million km). Standard for Solar System distances.' },
+    { id: 'ly', label: 'Light-years (ly)', metersPerUnit: LIGHT_YEAR, group: 'astronomical', name: 'Light-year', explain: 'Distance light travels in one Julian year (~9.46 trillion km). Used for stars and galaxies.' },
+    { id: 'pc', label: 'Parsecs (pc)', metersPerUnit: PC_M, group: 'astronomical', name: 'Parsec', explain: '~3.26 light-years. Distance at which 1 AU subtends 1 arcsecond. Standard in professional astronomy.' }
+  ];
+
+  var GROUPS = [
+    { id: 'metric', title: 'Metric (SI)' },
+    { id: 'imperial', title: 'Imperial / US customary' },
+    { id: 'astronomical', title: 'Astronomical' }
+  ];
+
+  var inputEl = document.getElementById('input');
+  var fromUnitSelect = document.getElementById('fromUnit');
+  var outputSection = document.getElementById('outputSection');
+  var explainTable = document.getElementById('explainTable');
+
+  function initUnits() {
+    UNITS.forEach(function (u) {
+      var opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = u.label;
+      if (u.id === 'm') opt.selected = true;
+      fromUnitSelect.appendChild(opt);
+    });
+  }
+
+  function formatNum(n) {
+    if (n === 0) return '0';
+    if (isNaN(n) || !isFinite(n)) return '—';
+    if (n >= 1e15 || (n < 1e-10 && n > 0)) return n.toExponential(4);
+    if (n >= 1e6 || (n < 0.0001 && n > 0)) return n.toLocaleString('en', { maximumFractionDigits: 4 });
+    if (Math.abs(n) >= 1 && Math.abs(n) < 1e6 && Number.isInteger(n)) return String(n);
+    var s = n.toFixed(6).replace(/\.?0+$/, '');
+    return s;
+  }
+
+  function update() {
+    var fromId = fromUnitSelect.value;
+    var fromUnit = UNITS.find(function (u) { return u.id === fromId; });
+    if (!fromUnit) return;
+
+    var raw = (inputEl.value || '').trim();
+    var num = raw === '' ? null : parseFloat(raw);
+    if (num !== null && (isNaN(num) || num < 0)) num = null;
+
+    var meters = (num !== null && num >= 0) ? num * fromUnit.metersPerUnit : null;
+
+    outputSection.innerHTML = '';
+    GROUPS.forEach(function (grp) {
+      var unitsInGroup = UNITS.filter(function (u) { return u.group === grp.id; });
+      var div = document.createElement('div');
+      div.className = 'output-group';
+      var h3 = document.createElement('h3');
+      h3.textContent = grp.title;
+      div.appendChild(h3);
+      var grid = document.createElement('div');
+      grid.className = 'output-grid';
+      unitsInGroup.forEach(function (u) {
+        var item = document.createElement('div');
+        item.className = 'output-item';
+        var unitSpan = document.createElement('div');
+        unitSpan.className = 'unit';
+        unitSpan.textContent = u.label;
+        var valueSpan = document.createElement('div');
+        valueSpan.className = 'value' + (meters === null ? ' empty' : '');
+        if (meters === null) {
+          valueSpan.textContent = raw ? 'Invalid' : '—';
+          if (raw) valueSpan.classList.add('error');
+        } else {
+          var val = meters / u.metersPerUnit;
+          valueSpan.textContent = formatNum(val);
+        }
+        item.appendChild(unitSpan);
+        item.appendChild(valueSpan);
+        grid.appendChild(item);
+      });
+      div.appendChild(grid);
+      outputSection.appendChild(div);
+    });
+  }
+
+  function buildExplainTable() {
+    var html = '';
+    UNITS.forEach(function (u) {
+      html += '<tr><td class="unit-name">' + u.id + '</td><td>' + u.name + '</td><td>' + u.explain + '</td></tr>';
+    });
+    explainTable.innerHTML = html;
+  }
+
+  inputEl.addEventListener('input', update);
+  fromUnitSelect.addEventListener('change', update);
+
+  initUnits();
+  buildExplainTable();
+  update();
+})();
+  </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T01:35:26.740Z",
+  "generatedAt": "2026-02-09T01:52:21.308Z",
   "categories": [
     "Text",
     "Encoding",
@@ -306,6 +306,28 @@
       ],
       "order": 6,
       "icon": "💾"
+    },
+    {
+      "id": "distance-converter",
+      "path": "tools/distance-converter/",
+      "name": "Distance converter",
+      "category": "Other",
+      "description": "Convert between metric, imperial and astronomical distances. mm, km, miles, light-years, parsecs and more, with explanations.",
+      "keywords": [
+        "distance",
+        "length",
+        "metric",
+        "imperial",
+        "miles",
+        "km",
+        "light-year",
+        "parsec",
+        "AU",
+        "astronomical",
+        "convert"
+      ],
+      "order": 7,
+      "icon": "📏"
     }
   ]
 }
