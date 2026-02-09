@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-08T20:49:47.157Z",
+  "generatedAt": "2026-02-09T00:26:46.575Z",
   "categories": [
     "Text",
     "Encoding",
@@ -20,6 +20,23 @@
         "search"
       ],
       "order": 1
+    },
+    {
+      "id": "case-converter",
+      "path": "tools/case-converter/",
+      "name": "Case converter",
+      "category": "Text",
+      "description": "Convert text between camelCase, snake_case, kebab-case, PascalCase, UPPER_SNAKE, Title Case, and more",
+      "keywords": [
+        "case",
+        "camel",
+        "snake",
+        "kebab",
+        "pascal",
+        "convert",
+        "naming"
+      ],
+      "order": 2
     },
     {
       "id": "base64",

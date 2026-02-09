@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Case converter</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, textarea { -webkit-user-select: text; user-select: text; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; }
+    textarea { width: 100%; min-height: 80px; font-family: ui-monospace, monospace; font-size: 0.9rem; padding: 0.5rem; }
+    button { font: inherit; padding: 0.5rem 1rem; margin: 0.25rem 0.25rem 0 0; cursor: pointer; }
+    .row { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .cases { margin-top: 1rem; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden; }
+    .case-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid #eee; font-family: ui-monospace, monospace; font-size: 0.9rem; flex-wrap: wrap; }
+    .case-row:last-child { border-bottom: none; }
+    .case-row:nth-child(odd) { background: #fafafa; }
+    .case-label { min-width: 10rem; font-family: system-ui, sans-serif; color: #555; font-size: 0.85rem; }
+    .case-value { flex: 1; min-width: 10rem; word-break: break-all; }
+    .case-row button { margin: 0; padding: 0.35rem 0.6rem; font-size: 0.8rem; }
+    .empty-msg { color: #888; font-size: 0.9rem; margin-top: 1rem; }
+    .helper { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #ddd; }
+    .helper h3 { margin: 0 0 0.5rem; font-size: 1rem; color: #333; }
+    .helper p, .helper ul { margin: 0 0 0.5rem; font-size: 0.85rem; color: #555; line-height: 1.5; }
+    .helper code { background: #f0f0f0; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.8em; }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <label for="input">Text to convert</label>
+    <textarea id="input" placeholder="e.g. hello world, helloWorld, hello_world, or getHTTPResponse…" aria-label="Text to convert"></textarea>
+  </div>
+  <button type="button" id="clearBtn">Clear</button>
+
+  <div id="outputSection" style="display: none;">
+    <div class="row">
+      <label>Converted</label>
+      <div class="cases" id="cases"></div>
+    </div>
+  </div>
+  <p id="emptyMsg" class="empty-msg" style="display: none;">Enter text above to see conversions.</p>
+
+  <section class="helper row" aria-label="Case types">
+    <h3>Case types</h3>
+    <p><strong>camelCase</strong> — first word lower, rest capitalized. <strong>PascalCase</strong> — every word capitalized. <strong>snake_case</strong> / <strong>kebab-case</strong> — lowercase with _ or -. <strong>UPPER_SNAKE_CASE</strong> — uppercase with underscores. <strong>Title Case</strong> / <strong>sentence case</strong> — spaces, first letter(s) cap. <strong>lower</strong> / <strong>UPPER</strong> — all one case with or without separators. <strong>dot.case</strong> / <strong>path/case</strong> — separated by . or /.</p>
+    <p>Input can be in any of these forms; words are detected from spaces, underscores, hyphens, and camelCase/PascalCase boundaries.</p>
+  </section>
+
+  <script>
+    (function () {
+      var input = document.getElementById('input');
+      var outputSection = document.getElementById('outputSection');
+      var casesEl = document.getElementById('cases');
+      var emptyMsg = document.getElementById('emptyMsg');
+      var clearBtn = document.getElementById('clearBtn');
+      var runTimeout = null;
+
+      function toWords(str) {
+        if (!str || !str.trim()) return [];
+        var s = str.trim()
+          .replace(/_/g, ' ').replace(/-/g, ' ')
+          .replace(/([a-z])([A-Z])/g, '$1 $2')
+          .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+        return s.split(/\s+/).filter(Boolean).map(function (w) { return w.toLowerCase(); });
+      }
+
+      function cap(s) {
+        if (!s) return s;
+        return s.charAt(0).toUpperCase() + s.slice(1);
+      }
+
+      var CASE_FORMATS = [
+        { id: 'camel', label: 'camelCase', fn: function (w) { return (w[0] || '').toLowerCase() + w.slice(1).map(cap).join(''); } },
+        { id: 'pascal', label: 'PascalCase', fn: function (w) { return w.map(cap).join(''); } },
+        { id: 'snake', label: 'snake_case', fn: function (w) { return w.join('_'); } },
+        { id: 'kebab', label: 'kebab-case', fn: function (w) { return w.join('-'); } },
+        { id: 'upper_snake', label: 'UPPER_SNAKE_CASE', fn: function (w) { return w.join('_').toUpperCase(); } },
+        { id: 'title', label: 'Title Case', fn: function (w) { return w.map(cap).join(' '); } },
+        { id: 'sentence', label: 'sentence case', fn: function (w) { return cap(w[0] || '') + (w.length > 1 ? ' ' + w.slice(1).join(' ') : ''); } },
+        { id: 'lower', label: 'lower', fn: function (w) { return w.join(' '); } },
+        { id: 'upper', label: 'UPPER', fn: function (w) { return w.join(' ').toUpperCase(); } },
+        { id: 'lower_flat', label: 'lowercase (no sep)', fn: function (w) { return w.join(''); } },
+        { id: 'upper_flat', label: 'UPPERCASE (no sep)', fn: function (w) { return w.join('').toUpperCase(); } },
+        { id: 'dot', label: 'dot.case', fn: function (w) { return w.join('.'); } },
+        { id: 'path', label: 'path/case', fn: function (w) { return w.join('/'); } }
+      ];
+
+      function run() {
+        var raw = (input.value || '').trim();
+        if (!raw) {
+          outputSection.style.display = 'none';
+          emptyMsg.style.display = 'block';
+          return;
+        }
+        emptyMsg.style.display = 'none';
+        var words = toWords(raw);
+        if (words.length === 0) {
+          outputSection.style.display = 'none';
+          emptyMsg.style.display = 'block';
+          return;
+        }
+        casesEl.innerHTML = '';
+        CASE_FORMATS.forEach(function (fmt) {
+          var value = fmt.fn(words);
+          var row = document.createElement('div');
+          row.className = 'case-row';
+          var labelSpan = document.createElement('span');
+          labelSpan.className = 'case-label';
+          labelSpan.textContent = fmt.label;
+          var valueSpan = document.createElement('span');
+          valueSpan.className = 'case-value';
+          valueSpan.textContent = value;
+          var copyBtn = document.createElement('button');
+          copyBtn.type = 'button';
+          copyBtn.textContent = 'Copy';
+          copyBtn.dataset.value = value;
+          copyBtn.onclick = function () {
+            var v = this.dataset.value;
+            if (!v) return;
+            navigator.clipboard.writeText(v).then(function () {
+              var t = copyBtn.textContent;
+              copyBtn.textContent = 'Copied!';
+              copyBtn.disabled = true;
+              setTimeout(function () { copyBtn.textContent = t; copyBtn.disabled = false; }, 1500);
+            });
+          };
+          row.appendChild(labelSpan);
+          row.appendChild(valueSpan);
+          row.appendChild(copyBtn);
+          casesEl.appendChild(row);
+        });
+        outputSection.style.display = 'block';
+      }
+
+      function scheduleRun() {
+        if (runTimeout) clearTimeout(runTimeout);
+        runTimeout = setTimeout(function () { runTimeout = null; run(); }, 200);
+      }
+
+      input.addEventListener('input', scheduleRun);
+      input.addEventListener('paste', function () { setTimeout(scheduleRun, 0); });
+      clearBtn.addEventListener('click', function () {
+        input.value = '';
+        outputSection.style.display = 'none';
+        emptyMsg.style.display = 'block';
+      });
+
+      var params = new URLSearchParams(window.location.search);
+      var t = params.get('t');
+      if (t != null && t !== '') {
+        input.value = t.replace(/\+/g, ' ').trim();
+        run();
+      }
+    })();
+  </script>
+</body>
+</html>

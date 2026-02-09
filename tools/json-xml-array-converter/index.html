@@ -76,7 +76,8 @@
         { value: 'elixir', label: 'Elixir' },
         { value: 'lua', label: 'Lua table' },
         { value: 'yaml', label: 'YAML' },
-        { value: 'url', label: 'URL parameters' }
+        { value: 'url', label: 'URL parameters' },
+        { value: 'env', label: '.env' }
       ];
 
       (function initFormatSelects() {
@@ -260,6 +261,49 @@
           parts.push(encodeURIComponent(String(k)) + '=' + encodeURIComponent(String(v)));
         }
         return (parts.length > 0 ? '?' : '') + parts.join('&');
+      }
+
+      function looksLikeEnv(str) {
+        var r = str.trim();
+        if (!r) return false;
+        if (r.charAt(0) === '{' || r.charAt(0) === '[' || r.charAt(0) === '<') return false;
+        if (r.indexOf('\n') === -1) return false;
+        return /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=/.test(r) || /^\s*#/m.test(r);
+      }
+
+      function parseEnv(str) {
+        str = str.trim();
+        var obj = {};
+        var lines = str.split(/\r?\n/);
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          if (/^\s*#/.test(line) || !/\S/.test(line)) continue;
+          line = line.replace(/^\s*export\s+/, '');
+          var eq = line.indexOf('=');
+          if (eq === -1) continue;
+          var key = line.slice(0, eq).trim();
+          var val = line.slice(eq + 1).trim();
+          if (val.length >= 2 && ((val.charAt(0) === '"' && val.charAt(val.length - 1) === '"') || (val.charAt(0) === "'" && val.charAt(val.length - 1) === "'"))) {
+            val = val.slice(1, -1).replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\'/g, "'");
+          }
+          obj[key] = val;
+        }
+        return obj;
+      }
+
+      function toEnv(obj) {
+        if (obj === null || obj === undefined) return '';
+        if (typeof obj !== 'object' || Array.isArray(obj)) return '';
+        var lines = [];
+        for (var k in obj) {
+          if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+          var v = obj[k];
+          if (v === null || v === undefined) v = '';
+          var s = String(v);
+          if (/[\s#="']/.test(s) || s.indexOf('\\') !== -1) s = '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
+          lines.push(k + '=' + s);
+        }
+        return lines.join('\n');
       }
 
       function replaceLiteralsOutsideQuotes(str) {
@@ -814,6 +858,7 @@
         if (/^\s*\[\s*"(?:[^"\\]|\\.)*"\s*:/.test(r)) return 'swift';
         if (looksLikeYaml(r)) return 'yaml';
         if (looksLikeUrlParams(r)) return 'url';
+        if (looksLikeEnv(r)) return 'env';
         return 'js';
       }
 
@@ -876,6 +921,10 @@
             var urlObj = parseUrlParams(str);
             return { obj: urlObj, format: 'url' };
           }
+          if (preferredFrom === 'env') {
+            var envObj = parseEnv(str);
+            return { obj: envObj, format: 'env' };
+          }
           var relaxed = tryParsePhpOrJs(str);
           return relaxed !== null ? { obj: relaxed, format: preferredFrom } : { obj: null, format: null };
         }
@@ -892,6 +941,10 @@
             var yamlObj = parseYaml(str);
             if (yamlObj != null && typeof yamlObj === 'object') return { obj: yamlObj, format: 'yaml' };
           } catch (e) {}
+        }
+        if (looksLikeEnv(str)) {
+          var envAuto = parseEnv(str);
+          if (Object.keys(envAuto).length > 0) return { obj: envAuto, format: 'env' };
         }
         if (looksLikeUrlParams(str)) {
           var urlAuto = parseUrlParams(str);
@@ -1185,6 +1238,9 @@
               break;
             case 'url':
               outText = toUrlParams(parsed.obj);
+              break;
+            case 'env':
+              outText = toEnv(parsed.obj);
               break;
             default:
               outText = JSON.stringify(parsed.obj, null, 2);
