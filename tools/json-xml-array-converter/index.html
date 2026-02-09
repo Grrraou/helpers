@@ -75,7 +75,8 @@
         { value: 'r', label: 'R' },
         { value: 'elixir', label: 'Elixir' },
         { value: 'lua', label: 'Lua table' },
-        { value: 'yaml', label: 'YAML' }
+        { value: 'yaml', label: 'YAML' },
+        { value: 'url', label: 'URL parameters' }
       ];
 
       (function initFormatSelects() {
@@ -216,6 +217,49 @@
         var arr = [];
         for (var i = 0; i < root.children.length; i++) arr.push(xmlToObj(root.children[i]));
         return arr;
+      }
+
+      function looksLikeUrlParams(str) {
+        var r = str.trim();
+        if (!r) return false;
+        if (r.charAt(0) === '{' || r.charAt(0) === '[') return false;
+        if (r.charAt(0) === '?') return true;
+        if (r.indexOf('&') !== -1 && r.indexOf('=') !== -1) return true;
+        if (/^[a-zA-Z0-9_.-]+=/.test(r) && r.indexOf('{') === -1 && r.indexOf('[') === -1) return true;
+        return false;
+      }
+
+      function parseUrlParams(str) {
+        str = str.trim();
+        if (str.indexOf('?') === 0) str = str.slice(1);
+        if (!str) return {};
+        var obj = {};
+        var pairs = str.split('&');
+        for (var i = 0; i < pairs.length; i++) {
+          var part = pairs[i];
+          var eq = part.indexOf('=');
+          var key = eq === -1 ? part : part.slice(0, eq);
+          var val = eq === -1 ? '' : part.slice(eq + 1);
+          try {
+            key = decodeURIComponent(key.replace(/\+/g, ' '));
+            val = decodeURIComponent(val.replace(/\+/g, ' '));
+          } catch (e) { continue; }
+          obj[key] = val;
+        }
+        return obj;
+      }
+
+      function toUrlParams(obj) {
+        if (obj === null || obj === undefined) return '?';
+        if (typeof obj !== 'object' || Array.isArray(obj)) return '?';
+        var parts = [];
+        for (var k in obj) {
+          if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+          var v = obj[k];
+          if (v === null || v === undefined) v = '';
+          parts.push(encodeURIComponent(String(k)) + '=' + encodeURIComponent(String(v)));
+        }
+        return (parts.length > 0 ? '?' : '') + parts.join('&');
       }
 
       function replaceLiteralsOutsideQuotes(str) {
@@ -632,7 +676,7 @@
         if (!r || r.length < 3) return false;
         var t = r.trim();
         if (t.charAt(0) === '{' || t.charAt(0) === '[' || t.charAt(0) === '<') return false;
-        return (/^\s*\S+\s*:\s*.+/m.test(r) || /^\s*\S+\s*:\s*$/m.test(r) || /^\s*-\s+/.m.test(r)) && !/^\s*</m.test(r);
+        return (/^\s*\S+\s*:\s*.+/m.test(r) || /^\s*\S+\s*:\s*$/m.test(r) || /^\s*-\s+/m.test(r)) && !/^\s*</m.test(r);
       }
 
       function parseYaml(str) {
@@ -769,6 +813,7 @@
         if (r.indexOf("'") !== -1 && r.indexOf(':') !== -1) return 'python';
         if (/^\s*\[\s*"(?:[^"\\]|\\.)*"\s*:/.test(r)) return 'swift';
         if (looksLikeYaml(r)) return 'yaml';
+        if (looksLikeUrlParams(r)) return 'url';
         return 'js';
       }
 
@@ -827,6 +872,10 @@
             } catch (e) {}
             return { obj: null, format: null };
           }
+          if (preferredFrom === 'url') {
+            var urlObj = parseUrlParams(str);
+            return { obj: urlObj, format: 'url' };
+          }
           var relaxed = tryParsePhpOrJs(str);
           return relaxed !== null ? { obj: relaxed, format: preferredFrom } : { obj: null, format: null };
         }
@@ -843,6 +892,10 @@
             var yamlObj = parseYaml(str);
             if (yamlObj != null && typeof yamlObj === 'object') return { obj: yamlObj, format: 'yaml' };
           } catch (e) {}
+        }
+        if (looksLikeUrlParams(str)) {
+          var urlAuto = parseUrlParams(str);
+          if (Object.keys(urlAuto).length > 0 || str.indexOf('=') !== -1) return { obj: urlAuto, format: 'url' };
         }
         var php = tryParsePhpOrJs(str);
         if (php !== null) return { obj: php, format: inferFormatFromRaw(str) };
@@ -1129,6 +1182,9 @@
               break;
             case 'yaml':
               outText = toYaml(parsed.obj);
+              break;
+            case 'url':
+              outText = toUrlParams(parsed.obj);
               break;
             default:
               outText = JSON.stringify(parsed.obj, null, 2);
