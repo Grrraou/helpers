@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T01:08:47.219Z",
+  "generatedAt": "2026-02-09T01:26:36.668Z",
   "categories": [
     "Text",
     "Encoding",
@@ -55,6 +55,25 @@
       ],
       "order": 3,
       "icon": "🔀"
+    },
+    {
+      "id": "base-converter",
+      "path": "tools/base-converter/",
+      "name": "Base converter",
+      "category": "Encoding",
+      "description": "Convert numbers between binary, decimal, hex, octal and any custom base (2–36)",
+      "keywords": [
+        "base",
+        "binary",
+        "decimal",
+        "hex",
+        "octal",
+        "radix",
+        "convert",
+        "number"
+      ],
+      "order": 1,
+      "icon": "#️⃣"
     },
     {
       "id": "base64",

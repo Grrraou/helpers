@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Base converter</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, select { -webkit-user-select: text; user-select: text; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; font-size: 0.95rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 1rem 0; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .row { margin-bottom: 1rem; }
+    input[type="text"], input[type="number"], select { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus { outline: none; border-color: #1a73e8; }
+    input[type="text"] { width: 100%; max-width: 24rem; font-family: ui-monospace, monospace; }
+    input[type="number"] { width: 5rem; }
+    .input-row { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+    .input-row input[type="text"] { flex: 1; min-width: 10rem; }
+    .note { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
+    .output-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+    .output-item { background: #f5f5f5; border-radius: 6px; padding: 0.6rem 0.75rem; }
+    .output-item label { font-size: 0.75rem; text-transform: uppercase; color: #666; margin-bottom: 0.2rem; }
+    .output-item .value { font-family: ui-monospace, monospace; font-size: 1rem; word-break: break-all; }
+    .output-item .value.empty { color: #999; }
+    .output-item .value.error { color: #c00; }
+    .output-item .copy-btn { margin-top: 0.35rem; font-size: 0.8rem; padding: 0.2rem 0.5rem; border: none; border-radius: 4px; background: #e0e0e0; cursor: pointer; }
+    .output-item .copy-btn:hover { background: #ccc; }
+    .output-item .copy-btn.copied { background: #0a7; color: #fff; }
+    .custom-base { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee; }
+    .custom-base .value { margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <h1>Base converter</h1>
+  <div class="row">
+    <label for="input">Number</label>
+    <div class="input-row">
+      <input type="text" id="input" placeholder="e.g. 255, FF, 11111111" autocomplete="off" />
+      <label for="fromBase" style="margin-bottom: 0; font-weight: normal;">from base</label>
+      <select id="fromBase">
+        <option value="2">Binary (2)</option>
+        <option value="8">Octal (8)</option>
+        <option value="10" selected>Decimal (10)</option>
+        <option value="16">Hex (16)</option>
+        <option value="other">Other…</option>
+      </select>
+      <span id="customFromWrap" style="display: none;">
+        <input type="number" id="customFrom" min="2" max="36" value="12" placeholder="2–36" style="width: 4rem;" />
+      </span>
+    </div>
+    <p class="note">Enter a number in the selected base. For hex use 0–9 and A–F. Bases 2–36 use 0–9 and A–Z.</p>
+  </div>
+
+  <div class="row">
+    <label>Converted to</label>
+    <div class="output-grid" id="outputGrid"></div>
+    <div class="custom-base" id="customBaseSection">
+      <label for="customTo">Also show in base</label>
+      <input type="number" id="customTo" min="2" max="36" value="" placeholder="2–36 (optional)" style="width: 6rem;" />
+      <div class="output-item" id="customOutputItem" style="display: none; margin-top: 0.5rem;">
+        <label>Base <span id="customToLabel">—</span></label>
+        <div class="value value empty" id="customOutput">—</div>
+        <button type="button" class="copy-btn" id="copyCustom">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+(function () {
+  var PRESETS = [
+    { name: 'Binary', base: 2 },
+    { name: 'Octal', base: 8 },
+    { name: 'Decimal', base: 10 },
+    { name: 'Hex', base: 16 }
+  ];
+
+  var inputEl = document.getElementById('input');
+  var fromBaseSelect = document.getElementById('fromBase');
+  var customFromWrap = document.getElementById('customFromWrap');
+  var customFromEl = document.getElementById('customFrom');
+  var outputGrid = document.getElementById('outputGrid');
+  var customToEl = document.getElementById('customTo');
+  var customBaseSection = document.getElementById('customBaseSection');
+  var customOutputItem = document.getElementById('customOutputItem');
+  var customOutputEl = document.getElementById('customOutput');
+  var customToLabel = document.getElementById('customToLabel');
+  var copyCustomBtn = document.getElementById('copyCustom');
+
+  function parseBase(s) {
+    var n = parseInt(s, 10);
+    return (n >= 2 && n <= 36) ? n : 10;
+  }
+
+  function getFromBase() {
+    var v = fromBaseSelect.value;
+    if (v === 'other') return parseBase(customFromEl.value) || 10;
+    return parseInt(v, 10);
+  }
+
+  function parseIntStrict(str, base) {
+    str = (str || '').trim().toUpperCase();
+    if (!str) return null;
+    var digits = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, base);
+    for (var i = 0; i < str.length; i++) {
+      if (digits.indexOf(str[i]) === -1) return NaN;
+    }
+    return parseInt(str, base);
+  }
+
+  function formatInBase(num, base) {
+    if (num === 0) return '0';
+    if (base < 2 || base > 36) return '';
+    var digits = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    if (num < 0) return '-' + formatInBase(-num, base);
+    var out = '';
+    while (num > 0) {
+      out = digits[num % base] + out;
+      num = Math.floor(num / base);
+    }
+    return out;
+  }
+
+  function update() {
+    var fromBase = getFromBase();
+    var raw = (inputEl.value || '').trim();
+    var num = raw === '' ? null : parseIntStrict(raw, fromBase);
+
+    if (fromBaseSelect.value === 'other') {
+      customFromWrap.style.display = '';
+      customFromEl.value = customFromEl.value || '12';
+      fromBase = parseBase(customFromEl.value) || 10;
+      num = raw === '' ? null : parseIntStrict(raw, fromBase);
+    } else {
+      customFromWrap.style.display = 'none';
+    }
+
+    var decimal = (num !== null && !isNaN(num)) ? num : null;
+
+    PRESETS.forEach(function (p) {
+      var valEl = p.valEl;
+      var copyBtn = p.copyBtn;
+      if (!valEl) return;
+      if (decimal === null) {
+        valEl.textContent = raw ? 'Invalid for base ' + fromBase : '—';
+        valEl.classList.add(raw ? 'error' : 'empty');
+        valEl.classList.remove('value');
+      } else {
+        valEl.textContent = p.base === 10 ? String(decimal) : formatInBase(decimal, p.base);
+        valEl.classList.remove('empty', 'error');
+        valEl.classList.add('value');
+      }
+    });
+
+    var customTo = parseBase(customToEl.value);
+    if (customTo && customTo !== 2 && customTo !== 8 && customTo !== 10 && customTo !== 16) {
+      customOutputItem.style.display = 'block';
+      customToLabel.textContent = customTo;
+      if (decimal !== null) {
+        customOutputEl.textContent = formatInBase(decimal, customTo);
+        customOutputEl.classList.remove('empty', 'error');
+      } else {
+        customOutputEl.textContent = raw ? 'Invalid' : '—';
+        customOutputEl.classList.add(raw ? 'error' : 'empty');
+      }
+    } else {
+      customOutputItem.style.display = 'none';
+    }
+  }
+
+  function buildOutputItems() {
+    outputGrid.innerHTML = '';
+    PRESETS.forEach(function (p) {
+      var item = document.createElement('div');
+      item.className = 'output-item';
+      var label = document.createElement('label');
+      label.textContent = p.name + ' (' + p.base + ')';
+      var value = document.createElement('div');
+      value.className = 'value empty';
+      value.textContent = '—';
+      var copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'copy-btn';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', function () {
+        var t = value.textContent;
+        if (!t || t === '—' || value.classList.contains('error')) return;
+        navigator.clipboard.writeText(t).then(function () {
+          copyBtn.classList.add('copied');
+          copyBtn.textContent = 'Copied';
+          setTimeout(function () { copyBtn.classList.remove('copied'); copyBtn.textContent = 'Copy'; }, 1500);
+        });
+      });
+      item.appendChild(label);
+      item.appendChild(value);
+      item.appendChild(copyBtn);
+      outputGrid.appendChild(item);
+      p.valEl = value;
+      p.copyBtn = copyBtn;
+    });
+  }
+
+  fromBaseSelect.addEventListener('change', function () {
+    customFromWrap.style.display = fromBaseSelect.value === 'other' ? '' : 'none';
+    update();
+  });
+
+  customFromEl.addEventListener('input', update);
+  customToEl.addEventListener('input', update);
+  inputEl.addEventListener('input', update);
+
+  copyCustomBtn.addEventListener('click', function () {
+    var t = customOutputEl.textContent;
+    if (!t || t === '—' || customOutputEl.classList.contains('error')) return;
+    navigator.clipboard.writeText(t).then(function () {
+      copyCustomBtn.classList.add('copied');
+      copyCustomBtn.textContent = 'Copied';
+      setTimeout(function () { copyCustomBtn.classList.remove('copied'); copyCustomBtn.textContent = 'Copy'; }, 1500);
+    });
+  });
+
+  buildOutputItems();
+  update();
+})();
+  </script>
+</body>
+</html>
