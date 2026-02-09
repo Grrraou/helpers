@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T22:02:22.154Z",
+  "generatedAt": "2026-02-09T22:09:57.864Z",
   "categories": [
     "Text",
     "Encoding",
@@ -96,6 +96,26 @@
       ],
       "order": 1,
       "icon": "🔤"
+    },
+    {
+      "id": "word-heatmap",
+      "path": "tools/word-heatmap/",
+      "name": "Word heat map",
+      "category": "Text",
+      "categories": [
+        "Text"
+      ],
+      "description": "Build a visual heat map or tag cloud from text. Words are sized and colored by frequency. Optional stop-word filter. Browser-only.",
+      "keywords": [
+        "word cloud",
+        "heat map",
+        "frequency",
+        "tag cloud",
+        "text analysis",
+        "visualization"
+      ],
+      "order": 1,
+      "icon": "🗺️"
     },
     {
       "id": "case-converter",
@@ -523,7 +543,7 @@
         "savings"
       ],
       "order": 1,
-      "icon": "💰"
+      "icon": "📈"
     },
     {
       "id": "time-converter",

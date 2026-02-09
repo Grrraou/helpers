@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Word heat map</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, textarea { -webkit-user-select: text; user-select: text; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; font-size: 0.95rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
+    .note { font-size: 0.85rem; color: #555; margin: 0 0 1rem 0; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .row { margin-bottom: 1rem; }
+    textarea { width: 100%; min-height: 140px; font-family: ui-monospace, monospace; font-size: 0.9rem; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; resize: vertical; }
+    textarea:focus { outline: none; border-color: #1a73e8; }
+    .opts { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 0.75rem; }
+    .opts label { margin-bottom: 0; margin-right: 0.25rem; font-weight: normal; }
+    .opts input[type="number"] { width: 4rem; padding: 0.35rem; border: 1px solid #ccc; border-radius: 4px; }
+    .cloud-wrap { min-height: 120px; padding: 1rem; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafafa; margin-top: 0.5rem; line-height: 2; }
+    .cloud-wrap .w { display: inline-block; margin: 0.2rem 0.4rem 0.2rem 0; padding: 0.1rem 0.25rem; border-radius: 3px; transition: transform 0.1s; cursor: default; }
+    .cloud-wrap .w:hover { transform: scale(1.05); }
+    .empty-msg { color: #888; font-size: 0.9rem; }
+    .legend { font-size: 0.8rem; color: #666; margin-top: 0.5rem; }
+    .local-banner { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 6px; padding: 0.5rem 0.75rem; margin-bottom: 1rem; font-size: 0.85rem; color: #2e7d32; }
+  </style>
+</head>
+<body>
+  <h1>Word heat map</h1>
+  <p class="note">Paste or type text. Words are shown as a tag cloud: <strong>size</strong> and <strong>color</strong> reflect frequency (more frequent → larger and warmer color). Runs in your browser only.</p>
+
+  <div class="local-banner" role="status">All processing is done locally. No text is sent to any server.</div>
+
+  <div class="row">
+    <label for="input">Text</label>
+    <textarea id="input" placeholder="Paste an article, notes, or any text…" rows="6"></textarea>
+  </div>
+
+  <div class="row">
+    <label>Options</label>
+    <div class="opts">
+      <label for="mode">Mode</label>
+      <select id="mode" aria-label="Words or characters">
+        <option value="words">Words</option>
+        <option value="chars">Characters</option>
+      </select>
+      <span id="wordOpts">
+        <label for="minLen">Min word length</label>
+        <input type="number" id="minLen" min="1" max="20" value="2" aria-label="Minimum word length" />
+        <label for="maxWords">Max words</label>
+        <input type="number" id="maxWords" min="10" max="500" value="80" aria-label="Maximum words to show" />
+        <label><input type="checkbox" id="stopWords" checked /> Exclude common words</label>
+      </span>
+      <span id="charOpts" style="display: none;">
+        <label for="maxChars">Max items</label>
+        <input type="number" id="maxChars" min="10" max="500" value="80" aria-label="Maximum characters to show" />
+      </span>
+      <label><input type="checkbox" id="showCount" /> Show count in ()</label>
+    </div>
+    <p class="legend" id="legend">Words are tokenized (letters only, lowercased). Toggle "Exclude common words" to hide the, a, is, etc.</p>
+  </div>
+
+  <div class="row">
+    <label>Heat map / tag cloud</label>
+    <div class="cloud-wrap" id="cloud" aria-live="polite"></div>
+    <p id="emptyMsg" class="empty-msg" style="display: none;">Enter text above to generate the cloud.</p>
+  </div>
+
+  <script>
+(function () {
+  var STOP = new Set(['a','an','the','and','or','but','in','on','at','to','for','of','with','by','from','as','is','was','are','were','been','be','have','has','had','do','does','did','will','would','could','should','may','might','must','can','this','that','these','those','it','its','i','you','he','she','we','they','what','which','who','when','where','how','if','then','so','than','into','out','up','down','about','over','after','before','between','through','during','no','not','only','just','also','more','most','other','some','such','there','their','them']);
+  var input = document.getElementById('input');
+  var mode = document.getElementById('mode');
+  var minLen = document.getElementById('minLen');
+  var maxWords = document.getElementById('maxWords');
+  var maxChars = document.getElementById('maxChars');
+  var stopWords = document.getElementById('stopWords');
+  var showCount = document.getElementById('showCount');
+  var cloud = document.getElementById('cloud');
+  var emptyMsg = document.getElementById('emptyMsg');
+  var wordOpts = document.getElementById('wordOpts');
+  var charOpts = document.getElementById('charOpts');
+  var legend = document.getElementById('legend');
+
+  function tokenizeWords(text) {
+    var words = text.toLowerCase().replace(/'/g, ' ').split(/[^a-z\u00e0-\u024f]+/i);
+    var counts = {};
+    words.forEach(function (w) {
+      w = w.trim();
+      if (w.length < 2) return;
+      counts[w] = (counts[w] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function tokenizeChars(text) {
+    var counts = {};
+    var s = text.toLowerCase();
+    for (var i = 0; i < s.length; i++) {
+      var c = s[i];
+      if (c === ' ' || c === '\n' || c === '\r' || c === '\t') continue;
+      counts[c] = (counts[c] || 0) + 1;
+    }
+    return counts;
+  }
+
+  function toggleModeUI() {
+    var isChars = mode.value === 'chars';
+    wordOpts.style.display = isChars ? 'none' : '';
+    charOpts.style.display = isChars ? '' : 'none';
+    legend.textContent = isChars
+      ? 'Character counts (non-whitespace, lowercased).'
+      : 'Words are tokenized (letters only, lowercased). Toggle "Exclude common words" to hide the, a, is, etc.';
+  }
+
+  function build() {
+    var text = (input.value || '').trim();
+    var isChars = mode.value === 'chars';
+    var min = Math.max(1, parseInt(minLen.value, 10) || 2);
+    var maxW = Math.max(10, Math.min(500, parseInt(maxWords.value, 10) || 80));
+    var maxC = Math.max(10, Math.min(500, parseInt(maxChars.value, 10) || 80));
+    var max = isChars ? maxC : maxW;
+    var useStop = !isChars && stopWords.checked;
+    var showCountVal = showCount.checked;
+
+    if (!text) {
+      cloud.innerHTML = '';
+      emptyMsg.style.display = 'block';
+      return;
+    }
+    emptyMsg.style.display = 'none';
+
+    var counts = isChars ? tokenizeChars(text) : tokenizeWords(text);
+    var list = [];
+    for (var key in counts) {
+      if (!isChars && key.length < min) continue;
+      if (useStop && STOP.has(key)) continue;
+      list.push({ word: key, count: counts[key] });
+    }
+    list.sort(function (a, b) { return b.count - a.count; });
+    list = list.slice(0, max);
+
+    if (list.length === 0) {
+      cloud.innerHTML = '<span class="empty-msg">' + (isChars ? 'No characters to display.' : 'No words to display. Try lowering min length or unchecking "Exclude common words".') + '</span>';
+      return;
+    }
+
+    var maxCount = list[0].count;
+    var minCount = list[list.length - 1].count;
+    var range = Math.max(1, maxCount - minCount);
+
+    function heatColor(t) {
+      var r = Math.round(255 * Math.min(1, t * 2));
+      var g = Math.round(255 * (1 - Math.abs(t - 0.5) * 1.2));
+      var b = Math.round(255 * (1 - t));
+      return 'rgb(' + Math.max(0, r) + ',' + Math.max(0, Math.min(255, g)) + ',' + Math.max(0, b) + ')';
+    }
+
+    var minSize = 12;
+    var maxSize = 48;
+    var frag = document.createDocumentFragment();
+    list.forEach(function (item) {
+      var t = range === 0 ? 1 : (item.count - minCount) / range;
+      var size = minSize + t * (maxSize - minSize);
+      var span = document.createElement('span');
+      span.className = 'w';
+      span.textContent = showCountVal ? item.word + ' (' + item.count + ')' : item.word;
+      span.style.fontSize = size + 'px';
+      span.style.color = heatColor(t);
+      span.title = item.word + ': ' + item.count + ' time' + (item.count !== 1 ? 's' : '');
+      frag.appendChild(span);
+    });
+    cloud.innerHTML = '';
+    cloud.appendChild(frag);
+  }
+
+  mode.addEventListener('change', function () { toggleModeUI(); build(); });
+  toggleModeUI();
+
+  input.addEventListener('input', build);
+  input.addEventListener('change', build);
+  minLen.addEventListener('input', build);
+  minLen.addEventListener('change', build);
+  maxWords.addEventListener('input', build);
+  maxWords.addEventListener('change', build);
+  maxChars.addEventListener('input', build);
+  maxChars.addEventListener('change', build);
+  stopWords.addEventListener('change', build);
+  showCount.addEventListener('change', build);
+
+  build();
+})();
+  </script>
+</body>
+</html>
