@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T01:52:21.308Z",
+  "generatedAt": "2026-02-09T02:03:22.395Z",
   "categories": [
     "Text",
     "Encoding",
@@ -138,6 +138,25 @@
       ],
       "order": 2,
       "icon": "🔗"
+    },
+    {
+      "id": "css-units-converter",
+      "path": "tools/css-units-converter/",
+      "name": "CSS units converter",
+      "category": "Web",
+      "description": "Convert between px, rem, em, %, vw, vh, pt and more. Set base font-size and viewport for accurate conversion.",
+      "keywords": [
+        "css",
+        "units",
+        "px",
+        "rem",
+        "em",
+        "viewport",
+        "convert",
+        "frontend"
+      ],
+      "order": 3,
+      "icon": "📐"
     },
     {
       "id": "json-xml-array-converter",
@@ -328,6 +347,42 @@
       ],
       "order": 7,
       "icon": "📏"
+    },
+    {
+      "id": "temperature-converter",
+      "path": "tools/temperature-converter/",
+      "name": "Temperature converter",
+      "category": "Other",
+      "description": "Convert between Celsius, Fahrenheit, Kelvin and Rankine. Explanations for each scale.",
+      "keywords": [
+        "temperature",
+        "celsius",
+        "fahrenheit",
+        "kelvin",
+        "rankine",
+        "convert",
+        "degrees"
+      ],
+      "order": 8,
+      "icon": "🌡️"
+    },
+    {
+      "id": "angle-converter",
+      "path": "tools/angle-converter/",
+      "name": "Angle converter",
+      "category": "Other",
+      "description": "Convert between degrees, radians, gradians, arc minutes, arc seconds and turns. Visual representation of the angle.",
+      "keywords": [
+        "angle",
+        "degrees",
+        "radians",
+        "gradians",
+        "convert",
+        "arc",
+        "turn"
+      ],
+      "order": 9,
+      "icon": "∠"
     }
   ]
 }

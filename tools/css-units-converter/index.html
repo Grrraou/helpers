@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSS units converter</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, select { -webkit-user-select: text; user-select: text; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; font-size: 0.95rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
+    h2 { font-size: 1rem; margin: 1.25rem 0 0.5rem 0; color: #333; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .row { margin-bottom: 1rem; }
+    input[type="text"], input[type="number"], select { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    input:focus, select:focus { outline: none; border-color: #1a73e8; }
+    .input-row { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+    .input-row input[type="text"] { width: 10rem; font-family: ui-monospace, monospace; }
+    .input-row input[type="number"] { width: 4.5rem; }
+    .settings { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-radius: 6px; font-size: 0.9rem; }
+    .settings label { margin-bottom: 0.15rem; }
+    .settings input { width: 4rem; }
+    .note { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
+    .output-section { margin-top: 1.25rem; }
+    .output-group { margin-bottom: 1rem; }
+    .output-group h3 { font-size: 0.8rem; text-transform: uppercase; color: #666; margin: 0 0 0.5rem 0; }
+    .output-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.5rem; }
+    .output-item { background: #f5f5f5; border-radius: 6px; padding: 0.5rem 0.65rem; }
+    .output-item .unit { font-size: 0.75rem; color: #666; }
+    .output-item .value { font-family: ui-monospace, monospace; font-size: 0.95rem; word-break: break-all; }
+    .output-item .value.empty { color: #999; }
+    .output-item .value.error { color: #c00; }
+    .preview-wrap { margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 6px; border: 1px solid #e0e0e0; max-height: 12rem; overflow: auto; }
+    .preview-wrap .preview-label { font-size: 0.8rem; color: #666; margin-bottom: 0.5rem; }
+    .preview-wrap .preview-text { margin: 0; line-height: 1.4; word-break: break-word; transition: font-size 0.1s ease; }
+    .preview-wrap .preview-placeholder { color: #999; font-size: 0.9rem; }
+    .explain { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e0e0e0; }
+    .explain h2 { margin-top: 0; }
+    .explain-block { background: #f8f9fa; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; font-size: 0.9rem; line-height: 1.5; }
+    .explain-block h4 { margin: 0 0 0.35rem 0; font-size: 0.9rem; }
+    .explain-block p { margin: 0; color: #444; }
+    .explain-block p + p { margin-top: 0.35rem; }
+    .explain-table { width: 100%; max-width: 44rem; border-collapse: collapse; font-size: 0.88rem; margin-top: 0.5rem; }
+    .explain-table th, .explain-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; vertical-align: top; }
+    .explain-table th { color: #666; font-weight: 600; }
+    .explain-table .unit-name { font-family: ui-monospace, monospace; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <h1>CSS units converter</h1>
+  <p style="margin: 0 0 1rem 0; font-size: 0.9rem; color: #555;">Convert between px, rem, em, %, viewport units, and absolute units. rem, em and % use the base font-size below; vw/vh use the viewport size.</p>
+
+  <div class="row">
+    <label for="input">Value</label>
+    <div class="input-row">
+      <input type="text" id="input" placeholder="e.g. 16 or 1.5" inputmode="decimal" autocomplete="off" />
+      <select id="fromUnit"></select>
+    </div>
+  </div>
+
+  <div class="settings">
+    <div>
+      <label for="baseFont">Base font-size (px)</label>
+      <input type="number" id="baseFont" min="1" max="999" value="16" step="1" />
+      <p class="note">Used for rem, em, and % (font-size context)</p>
+    </div>
+    <div>
+      <label for="vwWidth">Viewport width (px)</label>
+      <input type="number" id="vwWidth" min="1" value="1920" step="1" />
+    </div>
+    <div>
+      <label for="vwHeight">Viewport height (px)</label>
+      <input type="number" id="vwHeight" min="1" value="1080" step="1" />
+      <p class="note">Used for vw, vh, vmin, vmax</p>
+    </div>
+  </div>
+
+  <div class="preview-wrap" id="previewWrap">
+    <div class="preview-label" id="previewLabel">Text at this size</div>
+    <p class="preview-text" id="previewText">The quick brown fox jumps over the lazy dog. 0123456789</p>
+  </div>
+
+  <div class="output-section" id="outputSection"></div>
+
+  <section class="explain" id="explainSection">
+    <h2>About these units</h2>
+
+    <div class="explain-block">
+      <h4>px (pixels)</h4>
+      <p><strong>CSS pixels</strong> are reference units, not always one device pixel (e.g. on retina, 1px can be 2×2 device pixels). Used for precise layout and borders. Conversions to pt/in/cm use the standard 96 px = 1 in.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>rem (root em)</h4>
+      <p>Relative to the <strong>root element’s font-size</strong> (usually <code>&lt;html&gt;</code>). If root is 16px, 1rem = 16px, 1.5rem = 24px. Not affected by parent font-size. Preferred for spacing and font-size in scalable layouts.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>em</h4>
+      <p>Relative to the <strong>current element’s font-size</strong> (for font-size) or the parent’s font-size (for other properties like margin). So 1em can mean different px values at different levels. This converter assumes parent font-size = base (same as rem context) for a single conversion.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>% (percent)</h4>
+      <p>Meaning depends on the <strong>property</strong>: for <code>font-size</code>, 100% = 1em (parent’s font-size). For width/height, % is of the containing block. This converter uses font-size context: 100% = base font-size in px.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Viewport: vw, vh, vmin, vmax</h4>
+      <p><strong>1vw</strong> = 1% of viewport width, <strong>1vh</strong> = 1% of viewport height. <strong>vmin</strong> = smaller of vw/vh, <strong>vmax</strong> = larger. Useful for full-height sections or responsive typography. The “viewport” here is the browser window (or layout viewport); we use the values you enter above to convert to px.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Absolute: pt, pc, in, cm, mm</h4>
+      <p>In CSS, <strong>1in = 96px</strong>. So 1pt = 1⁄72 in = 96⁄72 px, 1pc = 12pt, 1cm = 96⁄2.54 px, 1mm = 96⁄25.4 px. Print styles often use pt. On screen, these are fixed relative to px.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Unit reference</h4>
+      <table class="explain-table" id="explainTable"></table>
+    </div>
+  </section>
+
+  <script>
+(function () {
+  var PX_PER_IN = 96;
+  var PX_PER_PT = PX_PER_IN / 72;
+  var PX_PER_CM = PX_PER_IN / 2.54;
+  var PX_PER_MM = PX_PER_IN / 25.4;
+
+  var UNITS = [
+    { id: 'px', label: 'px', toPx: function(v, ctx) { return v; }, fromPx: function(p, ctx) { return p; }, group: 'relative', name: 'Pixel', explain: 'CSS reference pixel. 96px = 1in. Base for conversions.' },
+    { id: 'rem', label: 'rem', toPx: function(v, ctx) { return v * ctx.base; }, fromPx: function(p, ctx) { return ctx.base ? p / ctx.base : 0; }, group: 'relative', name: 'rem', explain: 'Root em. Relative to root font-size. 1rem = base px when root is base.' },
+    { id: 'em', label: 'em', toPx: function(v, ctx) { return v * ctx.base; }, fromPx: function(p, ctx) { return ctx.base ? p / ctx.base : 0; }, group: 'relative', name: 'em', explain: 'Relative to parent (or current) font-size. Converter uses base as parent.' },
+    { id: 'pct', label: '%', toPx: function(v, ctx) { return (v / 100) * ctx.base; }, fromPx: function(p, ctx) { return ctx.base ? (p / ctx.base) * 100 : 0; }, group: 'relative', name: '% (font-size)', explain: 'Percent of parent font-size. 100% = 1em = base px in font-size context.' },
+    { id: 'vw', label: 'vw', toPx: function(v, ctx) { return (v / 100) * ctx.vw; }, fromPx: function(p, ctx) { return ctx.vw ? (p / ctx.vw) * 100 : 0; }, group: 'viewport', name: 'vw', explain: '1% of viewport width. Viewport = browser window (or iframe).' },
+    { id: 'vh', label: 'vh', toPx: function(v, ctx) { return (v / 100) * ctx.vh; }, fromPx: function(p, ctx) { return ctx.vh ? (p / ctx.vh) * 100 : 0; }, group: 'viewport', name: 'vh', explain: '1% of viewport height. Common for full-height sections.' },
+    { id: 'vmin', label: 'vmin', toPx: function(v, ctx) { return (v / 100) * Math.min(ctx.vw, ctx.vh); }, fromPx: function(p, ctx) { var m = Math.min(ctx.vw, ctx.vh); return m ? (p / m) * 100 : 0; }, group: 'viewport', name: 'vmin', explain: '1% of the smaller of viewport width and height.' },
+    { id: 'vmax', label: 'vmax', toPx: function(v, ctx) { return (v / 100) * Math.max(ctx.vw, ctx.vh); }, fromPx: function(p, ctx) { var m = Math.max(ctx.vw, ctx.vh); return m ? (p / m) * 100 : 0; }, group: 'viewport', name: 'vmax', explain: '1% of the larger of viewport width and height.' },
+    { id: 'pt', label: 'pt', toPx: function(v) { return v * PX_PER_PT; }, fromPx: function(p) { return p / PX_PER_PT; }, group: 'absolute', name: 'pt', explain: 'Point. 1pt = 1⁄72 in = 96⁄72 px. Used in print CSS.' },
+    { id: 'pc', label: 'pc', toPx: function(v) { return v * (12 * PX_PER_PT); }, fromPx: function(p) { return p / (12 * PX_PER_PT); }, group: 'absolute', name: 'pc', explain: 'Pica. 1pc = 12pt.' },
+    { id: 'in', label: 'in', toPx: function(v) { return v * PX_PER_IN; }, fromPx: function(p) { return p / PX_PER_IN; }, group: 'absolute', name: 'in', explain: 'Inch. In CSS, 1in = 96px (reference pixel).' },
+    { id: 'cm', label: 'cm', toPx: function(v) { return v * PX_PER_CM; }, fromPx: function(p) { return p / PX_PER_CM; }, group: 'absolute', name: 'cm', explain: 'Centimetre. 1in = 2.54cm, so 1cm = 96⁄2.54 px.' },
+    { id: 'mm', label: 'mm', toPx: function(v) { return v * PX_PER_MM; }, fromPx: function(p) { return p / PX_PER_MM; }, group: 'absolute', name: 'mm', explain: 'Millimetre. 1cm = 10mm.' }
+  ];
+
+  var GROUPS = [
+    { id: 'relative', title: 'Relative (font / base)' },
+    { id: 'viewport', title: 'Viewport' },
+    { id: 'absolute', title: 'Absolute' }
+  ];
+
+  var inputEl = document.getElementById('input');
+  var fromUnitSelect = document.getElementById('fromUnit');
+  var baseFontEl = document.getElementById('baseFont');
+  var vwWidthEl = document.getElementById('vwWidth');
+  var vwHeightEl = document.getElementById('vwHeight');
+  var outputSection = document.getElementById('outputSection');
+  var explainTable = document.getElementById('explainTable');
+  var previewWrap = document.getElementById('previewWrap');
+  var previewLabel = document.getElementById('previewLabel');
+  var previewText = document.getElementById('previewText');
+
+  function getCtx() {
+    var base = parseFloat(baseFontEl.value) || 16;
+    var vw = parseFloat(vwWidthEl.value) || 1920;
+    var vh = parseFloat(vwHeightEl.value) || 1080;
+    return { base: base, vw: vw, vh: vh };
+  }
+
+  function initUnits() {
+    UNITS.forEach(function (u) {
+      var opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = u.label;
+      if (u.id === 'px') opt.selected = true;
+      fromUnitSelect.appendChild(opt);
+    });
+  }
+
+  function formatNum(n) {
+    if (isNaN(n) || !isFinite(n)) return '—';
+    if (Number.isInteger(n)) return String(n);
+    var s = n.toFixed(4).replace(/\.?0+$/, '');
+    return s;
+  }
+
+  function update() {
+    var fromId = fromUnitSelect.value;
+    var fromUnit = UNITS.find(function (u) { return u.id === fromId; });
+    if (!fromUnit) return;
+
+    var raw = (inputEl.value || '').trim();
+    var num = raw === '' ? null : parseFloat(raw);
+    if (num !== null && isNaN(num)) num = null;
+
+    var ctx = getCtx();
+    var px = (num !== null) ? fromUnit.toPx(num, ctx) : null;
+    if (px !== null && px < 0) px = null;
+
+    if (px !== null && isFinite(px)) {
+      var size = Math.max(1, px);
+      previewText.style.fontSize = size + 'px';
+      previewText.style.display = '';
+      previewLabel.textContent = 'Text at this size (' + formatNum(px) + ' px equivalent)';
+      previewLabel.style.display = '';
+    } else {
+      previewText.style.fontSize = '';
+      previewText.style.display = 'none';
+      previewLabel.textContent = 'Enter a value to see text at that size.';
+      previewLabel.style.display = '';
+    }
+
+    outputSection.innerHTML = '';
+    GROUPS.forEach(function (grp) {
+      var unitsInGroup = UNITS.filter(function (u) { return u.group === grp.id; });
+      var div = document.createElement('div');
+      div.className = 'output-group';
+      var h3 = document.createElement('h3');
+      h3.textContent = grp.title;
+      div.appendChild(h3);
+      var grid = document.createElement('div');
+      grid.className = 'output-grid';
+      unitsInGroup.forEach(function (u) {
+        var item = document.createElement('div');
+        item.className = 'output-item';
+        var unitSpan = document.createElement('div');
+        unitSpan.className = 'unit';
+        unitSpan.textContent = u.label;
+        var valueSpan = document.createElement('div');
+        valueSpan.className = 'value' + (px === null ? ' empty' : '');
+        if (px === null) {
+          valueSpan.textContent = raw ? 'Invalid' : '—';
+          if (raw) valueSpan.classList.add('error');
+        } else {
+          var val = u.fromPx(px, ctx);
+          valueSpan.textContent = formatNum(val);
+        }
+        item.appendChild(unitSpan);
+        item.appendChild(valueSpan);
+        grid.appendChild(item);
+      });
+      div.appendChild(grid);
+      outputSection.appendChild(div);
+    });
+  }
+
+  function buildExplainTable() {
+    var html = '';
+    UNITS.forEach(function (u) {
+      html += '<tr><td class="unit-name">' + u.label + '</td><td>' + u.name + '</td><td>' + u.explain + '</td></tr>';
+    });
+    explainTable.innerHTML = html;
+  }
+
+  inputEl.addEventListener('input', update);
+  fromUnitSelect.addEventListener('change', update);
+  baseFontEl.addEventListener('input', update);
+  vwWidthEl.addEventListener('input', update);
+  vwHeightEl.addEventListener('input', update);
+
+  initUnits();
+  buildExplainTable();
+  update();
+})();
+  </script>
+</body>
+</html>

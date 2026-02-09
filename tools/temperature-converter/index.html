@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Temperature converter</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, select { -webkit-user-select: text; user-select: text; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; font-size: 0.95rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
+    h2 { font-size: 1rem; margin: 1.25rem 0 0.5rem 0; color: #333; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .row { margin-bottom: 1rem; }
+    input[type="text"], select { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    input:focus, select:focus { outline: none; border-color: #1a73e8; }
+    .input-row { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+    .input-row input { width: 10rem; font-family: ui-monospace, monospace; }
+    .output-section { margin-top: 1.25rem; }
+    .output-group { margin-bottom: 1rem; }
+    .output-group h3 { font-size: 0.8rem; text-transform: uppercase; color: #666; margin: 0 0 0.5rem 0; }
+    .output-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.5rem; }
+    .output-item { background: #f5f5f5; border-radius: 6px; padding: 0.5rem 0.65rem; }
+    .output-item .unit { font-size: 0.75rem; color: #666; }
+    .output-item .value { font-family: ui-monospace, monospace; font-size: 0.95rem; word-break: break-all; }
+    .output-item .value.empty { color: #999; }
+    .output-item .value.error { color: #c00; }
+    .explain { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e0e0e0; }
+    .explain h2 { margin-top: 0; }
+    .explain-block { background: #f8f9fa; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; font-size: 0.9rem; line-height: 1.5; }
+    .explain-block h4 { margin: 0 0 0.35rem 0; font-size: 0.9rem; }
+    .explain-block p { margin: 0; color: #444; }
+    .explain-block p + p { margin-top: 0.35rem; }
+    .explain-table { width: 100%; max-width: 42rem; border-collapse: collapse; font-size: 0.88rem; margin-top: 0.5rem; }
+    .explain-table th, .explain-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; vertical-align: top; }
+    .explain-table th { color: #666; font-weight: 600; }
+    .explain-table .unit-name { font-family: ui-monospace, monospace; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <h1>Temperature converter</h1>
+  <p style="margin: 0 0 1rem 0; font-size: 0.9rem; color: #555;">Convert between Celsius, Fahrenheit, Kelvin, and Rankine.</p>
+  <div class="row">
+    <label for="input">Temperature</label>
+    <div class="input-row">
+      <input type="text" id="input" placeholder="e.g. 25 or -40" inputmode="decimal" autocomplete="off" />
+      <select id="fromUnit"></select>
+    </div>
+  </div>
+
+  <div class="output-section" id="outputSection"></div>
+
+  <section class="explain" id="explainSection">
+    <h2>About these scales</h2>
+
+    <div class="explain-block">
+      <h4>Celsius (°C)</h4>
+      <p>Water freezes at <strong>0 °C</strong> and boils at <strong>100 °C</strong> at standard atmospheric pressure. Used in most of the world for weather, cooking, and science. The scale is named after Anders Celsius; the degree is the same size as the kelvin (1 °C = 1 K), but Celsius has its zero at the freezing point of water instead of absolute zero.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Fahrenheit (°F)</h4>
+      <p>Water freezes at <strong>32 °F</strong> and boils at <strong>212 °F</strong>. Still used in the US for weather and body temperature (e.g. 98.6 °F). The scale was designed so 0 °F was a cold brine mixture and 96 °F was roughly human body temperature; it was later adjusted to fix the water freeze/boil points. Formula to Celsius: °C = (°F − 32) × 5⁄9.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Kelvin (K)</h4>
+      <p>The <strong>SI base unit</strong> of temperature. <strong>0 K</strong> is absolute zero (no “degree” symbol). The kelvin is defined from the Boltzmann constant. Water freezes at 273.15 K and boils at 373.15 K. Used in physics and chemistry whenever an absolute scale is needed (e.g. gas laws). Celsius and kelvin have the same step size: T in K = T in °C + 273.15.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Rankine (°R)</h4>
+      <p>An <strong>absolute</strong> scale with the same degree size as Fahrenheit: 0 °R = absolute zero, so water freezes at 491.67 °R and boils at 671.67 °R. Used in some US engineering (e.g. thermodynamics). Rare in everyday use. Formula: °R = °F + 459.67, or K = °R × 5⁄9.</p>
+    </div>
+
+    <div class="explain-block">
+      <h4>Unit reference</h4>
+      <table class="explain-table" id="explainTable"></table>
+    </div>
+  </section>
+
+  <script>
+(function () {
+  function toKfromC(v) { return v + 273.15; }
+  function fromKtoC(K) { return K - 273.15; }
+  function toKfromF(v) { return (v - 32) * 5/9 + 273.15; }
+  function fromKtoF(K) { return (K - 273.15) * 9/5 + 32; }
+  function toKfromK(v) { return v; }
+  function fromKtoK(K) { return K; }
+  function toKfromR(v) { return v * 5/9; }
+  function fromKtoR(K) { return K * 9/5; }
+
+  var UNITS = [
+    { id: 'C', label: 'Celsius (°C)', toK: toKfromC, fromK: fromKtoC, group: 'common', name: 'Celsius', explain: 'Water 0 °C freeze, 100 °C boil. Used worldwide for weather and science. Same step size as kelvin.' },
+    { id: 'F', label: 'Fahrenheit (°F)', toK: toKfromF, fromK: fromKtoF, group: 'common', name: 'Fahrenheit', explain: 'Water 32 °F freeze, 212 °F boil. Used mainly in the US for weather and body temperature.' },
+    { id: 'K', label: 'Kelvin (K)', toK: toKfromK, fromK: fromKtoK, group: 'common', name: 'Kelvin', explain: 'SI base unit. 0 K = absolute zero. No degree symbol. Used in physics and chemistry.' },
+    { id: 'R', label: 'Rankine (°R)', toK: toKfromR, fromK: fromKtoR, group: 'other', name: 'Rankine', explain: 'Absolute scale with Fahrenheit-sized degrees. 0 °R = absolute zero. Used in some US engineering.' }
+  ];
+
+  var GROUPS = [
+    { id: 'common', title: 'Common' },
+    { id: 'other', title: 'Other' }
+  ];
+
+  var inputEl = document.getElementById('input');
+  var fromUnitSelect = document.getElementById('fromUnit');
+  var outputSection = document.getElementById('outputSection');
+  var explainTable = document.getElementById('explainTable');
+
+  function initUnits() {
+    UNITS.forEach(function (u) {
+      var opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = u.label;
+      if (u.id === 'C') opt.selected = true;
+      fromUnitSelect.appendChild(opt);
+    });
+  }
+
+  function formatNum(n) {
+    if (isNaN(n) || !isFinite(n)) return '—';
+    if (Number.isInteger(n)) return String(n);
+    var s = n.toFixed(4).replace(/\.?0+$/, '');
+    return s;
+  }
+
+  function update() {
+    var fromId = fromUnitSelect.value;
+    var fromUnit = UNITS.find(function (u) { return u.id === fromId; });
+    if (!fromUnit) return;
+
+    var raw = (inputEl.value || '').trim();
+    var num = raw === '' ? null : parseFloat(raw);
+    if (num !== null && isNaN(num)) num = null;
+
+    var kelvin = (num !== null) ? fromUnit.toK(num) : null;
+    if (kelvin !== null && kelvin < 0) kelvin = null;
+
+    outputSection.innerHTML = '';
+    GROUPS.forEach(function (grp) {
+      var unitsInGroup = UNITS.filter(function (u) { return u.group === grp.id; });
+      var div = document.createElement('div');
+      div.className = 'output-group';
+      var h3 = document.createElement('h3');
+      h3.textContent = grp.title;
+      div.appendChild(h3);
+      var grid = document.createElement('div');
+      grid.className = 'output-grid';
+      unitsInGroup.forEach(function (u) {
+        var item = document.createElement('div');
+        item.className = 'output-item';
+        var unitSpan = document.createElement('div');
+        unitSpan.className = 'unit';
+        unitSpan.textContent = u.label;
+        var valueSpan = document.createElement('div');
+        valueSpan.className = 'value' + (kelvin === null ? ' empty' : '');
+        if (kelvin === null) {
+          valueSpan.textContent = raw ? 'Invalid' : '—';
+          if (raw) valueSpan.classList.add('error');
+        } else {
+          var val = u.fromK(kelvin);
+          valueSpan.textContent = formatNum(val);
+        }
+        item.appendChild(unitSpan);
+        item.appendChild(valueSpan);
+        grid.appendChild(item);
+      });
+      div.appendChild(grid);
+      outputSection.appendChild(div);
+    });
+  }
+
+  function buildExplainTable() {
+    var html = '';
+    UNITS.forEach(function (u) {
+      html += '<tr><td class="unit-name">' + u.id + '</td><td>' + u.name + '</td><td>' + u.explain + '</td></tr>';
+    });
+    explainTable.innerHTML = html;
+  }
+
+  inputEl.addEventListener('input', update);
+  fromUnitSelect.addEventListener('change', update);
+
+  initUnits();
+  buildExplainTable();
+  update();
+})();
+  </script>
+</body>
+</html>
