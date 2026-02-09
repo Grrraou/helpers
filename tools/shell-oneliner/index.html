@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shell one-liner</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, select, button { font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; background: #f8f9fa; color: #1a1a1a; font-size: 0.95rem; }
+    h1 { font-size: 1.35rem; margin: 0 0 1rem 0; }
+    .layout { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; max-width: 1200px; }
+    @media (max-width: 700px) { .layout { grid-template-columns: 1fr; } }
+    .sidebar { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 0.5rem; max-height: 70vh; overflow: auto; }
+    .sidebar h2 { font-size: 0.75rem; text-transform: uppercase; color: #666; margin: 0.5rem 0 0.25rem 0.5rem; }
+    .cmd-btn { display: block; width: 100%; text-align: left; padding: 0.5rem 0.6rem; border: none; border-radius: 6px; background: none; cursor: pointer; font-size: 0.9rem; }
+    .cmd-btn:hover { background: #e8eaed; }
+    .cmd-btn.active { background: #e8f0fe; color: #1a73e8; font-weight: 500; }
+    .main { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; }
+    .search { width: 100%; padding: 0.5rem 0.6rem; margin-bottom: 0.5rem; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+    .search:focus { outline: none; border-color: #1a73e8; }
+    .form-section { margin-bottom: 1rem; }
+    .form-section label { display: block; margin-bottom: 0.25rem; font-weight: 500; color: #333; }
+    .form-section input[type="text"], .form-section input[type="number"], .form-section select { width: 100%; max-width: 28rem; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; }
+    .form-section input:focus, .form-section select:focus { outline: none; border-color: #1a73e8; }
+    .form-section input[type="checkbox"] { margin-right: 0.5rem; vertical-align: middle; }
+    .form-row { margin-bottom: 0.75rem; }
+    .cmd-description { margin: 0 0 1rem 0; font-size: 0.9rem; color: #555; line-height: 1.4; }
+    .out-section { margin-top: 1.25rem; }
+    .out-section h3 { font-size: 0.85rem; color: #666; margin: 0 0 0.5rem 0; display: flex; align-items: center; justify-content: space-between; }
+    .out-block { position: relative; background: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 0.75rem 2.5rem 0.75rem 0.75rem; font-family: ui-monospace, monospace; font-size: 0.82rem; white-space: pre-wrap; word-break: break-all; margin-bottom: 0.75rem; min-height: 2.5rem; }
+    .out-block .copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; border: none; border-radius: 4px; background: #444; color: #ddd; cursor: pointer; }
+    .out-block .copy-btn:hover { background: #555; }
+    .out-block .copy-btn.copied { background: #0a7; color: #fff; }
+    .out-block.empty { color: #666; }
+    .platform-tag { font-size: 0.7rem; text-transform: uppercase; color: #888; margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Shell one-liner</h1>
+  <div class="layout">
+    <aside class="sidebar">
+      <input type="text" class="search" id="search" placeholder="Search commands…" aria-label="Search" autocomplete="off" />
+      <div id="command-list"></div>
+    </aside>
+    <main class="main">
+      <div id="form-area"></div>
+      <div class="out-section" id="out-section">
+        <h3><span class="platform-tag">Windows CMD</span><button type="button" class="copy-btn" data-copy="cmd">Copy</button></h3>
+        <div class="out-block" id="out-cmd" data-platform="cmd"></div>
+        <h3><span class="platform-tag">PowerShell</span><button type="button" class="copy-btn" data-copy="ps">Copy</button></h3>
+        <div class="out-block" id="out-ps" data-platform="ps"></div>
+        <h3><span class="platform-tag">Bash (Linux)</span><button type="button" class="copy-btn" data-copy="bash">Copy</button></h3>
+        <div class="out-block" id="out-bash" data-platform="bash"></div>
+        <h3><span class="platform-tag">Bash / Zsh (Mac)</span><button type="button" class="copy-btn" data-copy="mac">Copy</button></h3>
+        <div class="out-block" id="out-mac" data-platform="mac"></div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+(function () {
+  var CATEGORIES = ['Network', 'File transfer', 'File ops', 'Text & search', 'System', 'Crypto & encoding'];
+
+  function tmpl(tpl, state) {
+    var s = tpl;
+    s = s.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, function (_, key, block) {
+      var v = state[key];
+      return (v === true || (typeof v === 'string' && v.trim() !== '') || (typeof v === 'number' && !isNaN(v))) ? block : '';
+    });
+    s = s.replace(/\{\{\^(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, function (_, key, block) {
+      var v = state[key];
+      return (v === true || (typeof v === 'string' && v.trim() !== '') || (typeof v === 'number' && !isNaN(v))) ? '' : block;
+    });
+    s = s.replace(/\{\{(\w+)\}\}/g, function (_, key) { return state[key] != null ? String(state[key]).trim() : ''; });
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
+  var COMMANDS = [
+    {
+      id: 'curl',
+      name: 'Download URL (curl)',
+      category: 'Network',
+      params: [
+        { id: 'url', label: 'URL', type: 'text', placeholder: 'https://example.com/file.zip', default: '' },
+        { id: 'output', label: 'Save as (optional)', type: 'text', placeholder: 'filename', default: '' },
+        { id: 'follow', label: 'Follow redirects', type: 'checkbox', default: true },
+        { id: 'silent', label: 'Silent (no progress)', type: 'checkbox', default: false },
+        { id: 'insecure', label: 'Allow insecure SSL', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'curl {{#follow}}-L {{/follow}}{{#silent}}-s {{/silent}}{{#insecure}}-k {{/insecure}}{{#output}}-o {{output}} {{/output}}{{url}}',
+        ps: "Invoke-WebRequest -Uri '{{url}}'{{#output}} -OutFile '{{output}}'{{/output}} -UseBasicParsing{{#follow}} -MaximumRedirection 5{{/follow}}{{#insecure}} -SkipCertificateCheck{{/insecure}}",
+        bash: "curl {{#follow}}-L {{/follow}}{{#silent}}-s {{/silent}}{{#insecure}}-k {{/insecure}}{{#output}}-o '{{output}}' {{/output}}'{{url}}'",
+        mac: "curl {{#follow}}-L {{/follow}}{{#silent}}-s {{/silent}}{{#insecure}}-k {{/insecure}}{{#output}}-o '{{output}}' {{/output}}'{{url}}'"
+      }
+    },
+    {
+      id: 'wget',
+      name: 'Download URL (wget)',
+      category: 'Network',
+      params: [
+        { id: 'url', label: 'URL', type: 'text', placeholder: 'https://example.com/file.zip', default: '' },
+        { id: 'output', label: 'Save as (optional)', type: 'text', placeholder: 'filename', default: '' },
+        { id: 'noCheckCert', label: 'No certificate check', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'curl -L -o {{output}} {{url}}',
+        ps: "Invoke-WebRequest -Uri '{{url}}'{{#output}} -OutFile '{{output}}'{{/output}} -UseBasicParsing",
+        bash: "wget{{#noCheckCert}} --no-check-certificate{{/noCheckCert}}{{#output}} -O '{{output}}'{{/output}} '{{url}}'",
+        mac: "wget{{#noCheckCert}} --no-check-certificate{{/noCheckCert}}{{#output}} -O '{{output}}'{{/output}} '{{url}}'"
+      }
+    },
+    {
+      id: 'ssh',
+      name: 'SSH connect',
+      category: 'Network',
+      params: [
+        { id: 'user', label: 'User', type: 'text', placeholder: 'root', default: '' },
+        { id: 'host', label: 'Host', type: 'text', placeholder: 'example.com or IP', default: '' },
+        { id: 'port', label: 'Port (optional)', type: 'number', placeholder: '22', default: '' },
+        { id: 'key', label: 'Private key path (optional)', type: 'text', placeholder: '~/.ssh/id_rsa', default: '' },
+        { id: 'verbose', label: 'Verbose', type: 'checkbox', default: false },
+        { id: 'command', label: 'Remote command (optional)', type: 'text', placeholder: 'ls /tmp', default: '' }
+      ],
+      templates: {
+        cmd: 'ssh{{#key}} -i {{key}}{{/key}}{{#port}} -p {{port}}{{/port}}{{#verbose}} -v{{/verbose}} {{user}}@{{host}}{{#command}} {{command}}{{/command}}',
+        ps: 'ssh{{#key}} -i {{key}}{{/key}}{{#port}} -p {{port}}{{/port}}{{#verbose}} -v{{/verbose}} {{user}}@{{host}}{{#command}} {{command}}{{/command}}',
+        bash: 'ssh{{#key}} -i {{key}}{{/key}}{{#port}} -p {{port}}{{/port}}{{#verbose}} -v{{/verbose}} {{user}}@{{host}}{{#command}} {{command}}{{/command}}',
+        mac: 'ssh{{#key}} -i {{key}}{{/key}}{{#port}} -p {{port}}{{/port}}{{#verbose}} -v{{/verbose}} {{user}}@{{host}}{{#command}} {{command}}{{/command}}'
+      }
+    },
+    {
+      id: 'scp',
+      name: 'SCP copy over SSH',
+      category: 'File transfer',
+      params: [
+        { id: 'source', label: 'Source (user@host:path or local path)', type: 'text', placeholder: 'user@host:/remote/file', default: '' },
+        { id: 'dest', label: 'Destination', type: 'text', placeholder: 'user@host:/remote/ or ./local/', default: '' },
+        { id: 'key', label: 'Private key path (optional)', type: 'text', placeholder: '~/.ssh/id_rsa', default: '' },
+        { id: 'port', label: 'Port (optional)', type: 'number', placeholder: '22', default: '' },
+        { id: 'recursive', label: 'Recursive (-r)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'scp{{#key}} -i {{key}}{{/key}}{{#port}} -P {{port}}{{/port}}{{#recursive}} -r{{/recursive}} {{source}} {{dest}}',
+        ps: 'scp{{#key}} -i {{key}}{{/key}}{{#port}} -P {{port}}{{/port}}{{#recursive}} -r{{/recursive}} {{source}} {{dest}}',
+        bash: 'scp{{#key}} -i {{key}}{{/key}}{{#port}} -P {{port}}{{/port}}{{#recursive}} -r{{/recursive}} {{source}} {{dest}}',
+        mac: 'scp{{#key}} -i {{key}}{{/key}}{{#port}} -P {{port}}{{/port}}{{#recursive}} -r{{/recursive}} {{source}} {{dest}}'
+      }
+    },
+    {
+      id: 'rsync',
+      name: 'Rsync (sync files)',
+      category: 'File transfer',
+      params: [
+        { id: 'source', label: 'Source', type: 'text', placeholder: 'user@host:/path/ or ./local/', default: '' },
+        { id: 'dest', label: 'Destination', type: 'text', placeholder: 'user@host:/path/ or ./local/', default: '' },
+        { id: 'key', label: 'SSH key path (optional)', type: 'text', placeholder: '~/.ssh/id_rsa', default: '' },
+        { id: 'port', label: 'SSH port (optional)', type: 'number', placeholder: '22', default: '' },
+        { id: 'archive', label: 'Archive mode (-a)', type: 'checkbox', default: true },
+        { id: 'delete', label: 'Delete extraneous files (--delete)', type: 'checkbox', default: false },
+        { id: 'exclude', label: 'Exclude pattern (optional)', type: 'text', placeholder: '.git', default: '' }
+      ],
+      templates: {
+        cmd: 'echo "Use WSL or rsync for Windows"',
+        ps: "rsync{{#key}} -e \"ssh -i {{key}}{{#port}} -p {{port}}{{/port}}\"{{/key}}{{#archive}} -a{{/archive}}{{#delete}} --delete{{/delete}}{{#exclude}} --exclude '{{exclude}}'{{/exclude}} {{source}} {{dest}}",
+        bash: "rsync{{#key}} -e \"ssh -i {{key}}{{#port}} -p {{port}}{{/port}}\"{{/key}}{{#archive}} -avz{{/archive}}{{#delete}} --delete{{/delete}}{{#exclude}} --exclude '{{exclude}}'{{/exclude}} {{source}} {{dest}}",
+        mac: "rsync{{#key}} -e \"ssh -i {{key}}{{#port}} -p {{port}}{{/port}}\"{{/key}}{{#archive}} -avz{{/archive}}{{#delete}} --delete{{/delete}}{{#exclude}} --exclude '{{exclude}}'{{/exclude}} {{source}} {{dest}}"
+      }
+    },
+    {
+      id: 'tar-extract',
+      name: 'Tar extract',
+      category: 'File ops',
+      params: [
+        { id: 'archive', label: 'Archive path', type: 'text', placeholder: 'file.tar.gz', default: '' },
+        { id: 'dir', label: 'Extract to (optional)', type: 'text', placeholder: './out', default: '' },
+        { id: 'gzip', label: 'Gzip (.gz)', type: 'checkbox', default: true },
+        { id: 'verbose', label: 'Verbose', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'tar -x{{#gzip}}z{{/gzip}}{{#verbose}}v{{/verbose}}f {{archive}}{{#dir}} -C {{dir}}{{/dir}}',
+        ps: "tar -x{{#gzip}}z{{/gzip}}{{#verbose}}v{{/verbose}}f '{{archive}}'{{#dir}} -C '{{dir}}'{{/dir}}",
+        bash: "tar -x{{#gzip}}z{{/gzip}}{{#verbose}}v{{/verbose}}f '{{archive}}'{{#dir}} -C '{{dir}}'{{/dir}}",
+        mac: "tar -x{{#gzip}}z{{/gzip}}{{#verbose}}v{{/verbose}}f '{{archive}}'{{#dir}} -C '{{dir}}'{{/dir}}"
+      }
+    },
+    {
+      id: 'tar-create',
+      name: 'Tar create archive',
+      category: 'File ops',
+      params: [
+        { id: 'archive', label: 'Archive path', type: 'text', placeholder: 'out.tar.gz', default: '' },
+        { id: 'files', label: 'Files/dirs to archive', type: 'text', placeholder: 'file1 dir1', default: '' },
+        { id: 'gzip', label: 'Gzip (.gz)', type: 'checkbox', default: true },
+        { id: 'verbose', label: 'Verbose', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'tar -c{{#gzip}}z{{/gzip}}{{#verbose}}v{{/verbose}}f {{archive}} {{files}}',
+        ps: "tar -c{{#gzip}}z{{/gzip}}{{#verbose}}v{{/verbose}}f '{{archive}}' {{files}}",
+        bash: "tar -c{{#gzip}}z{{/gzip}}{{#verbose}}v{{/verbose}}f '{{archive}}' {{files}}",
+        mac: "tar -c{{#gzip}}z{{/gzip}}{{#verbose}}v{{/verbose}}f '{{archive}}' {{files}}"
+      }
+    },
+    {
+      id: 'grep',
+      name: 'Grep (search text)',
+      category: 'Text & search',
+      params: [
+        { id: 'pattern', label: 'Pattern', type: 'text', placeholder: 'search term or regex', default: '' },
+        { id: 'path', label: 'File or path', type: 'text', placeholder: 'file.txt or .', default: '' },
+        { id: 'ignoreCase', label: 'Ignore case', type: 'checkbox', default: false },
+        { id: 'recursive', label: 'Recursive', type: 'checkbox', default: false },
+        { id: 'lineNumber', label: 'Show line numbers', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'findstr{{#ignoreCase}} /i{{/ignoreCase}}{{#recursive}} /s{{/recursive}} "{{pattern}}" {{path}}',
+        ps: "Select-String -Pattern '{{pattern}}'{{#path}} -Path '{{path}}'{{/path}}{{#ignoreCase}} -SimpleMatch:$false -AllMatches{{/ignoreCase}}{{#recursive}} -Recurse{{/recursive}}{{#lineNumber}} | ForEach-Object { \"$($_.LineNumber): $($_.Line)\" }{{/lineNumber}}",
+        bash: "grep{{#ignoreCase}} -i{{/ignoreCase}}{{#recursive}} -r{{/recursive}}{{#lineNumber}} -n{{/lineNumber}} '{{pattern}}' {{path}}",
+        mac: "grep{{#ignoreCase}} -i{{/ignoreCase}}{{#recursive}} -r{{/recursive}}{{#lineNumber}} -n{{/lineNumber}} '{{pattern}}' {{path}}"
+      }
+    },
+    {
+      id: 'find',
+      name: 'Find files',
+      category: 'Text & search',
+      params: [
+        { id: 'path', label: 'Search path', type: 'text', placeholder: '.', default: '.' },
+        { id: 'name', label: 'Name pattern (e.g. *.txt)', type: 'text', placeholder: '*.txt', default: '' },
+        { id: 'type', label: 'Type', type: 'select', options: [{ value: '', label: 'any' }, { value: 'f', label: 'file' }, { value: 'd', label: 'directory' }], default: '' }
+      ],
+      templates: {
+        cmd: 'dir /s /b {{path}}\\{{name}}',
+        ps: "Get-ChildItem -Path '{{path}}' -Recurse{{#name}} -Filter '{{name}}'{{/name}}{{#type}} | Where-Object { $_.PSIsContainer -eq {{#type}}($_.PSIsContainer){{/type}} }",
+        bash: "find {{path}}{{#name}} -name '{{name}}'{{/name}}{{#type}} -type {{type}}{{/type}}",
+        mac: "find {{path}}{{#name}} -name '{{name}}'{{/name}}{{#type}} -type {{type}}{{/type}}"
+      }
+    },
+    {
+      id: 'sed-replace',
+      name: 'Sed replace (stream edit)',
+      category: 'Text & search',
+      params: [
+        { id: 'expr', label: 'Expression (e.g. s/old/new/g)', type: 'text', placeholder: 's/foo/bar/g', default: '' },
+        { id: 'file', label: 'File', type: 'text', placeholder: 'file.txt', default: '' },
+        { id: 'inplace', label: 'Edit in place (-i)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'powershell -Command "(Get-Content {{file}}) -replace \'old\',\'new\' | Set-Content {{file}}"',
+        ps: "(Get-Content '{{file}}') -replace 'old','new' | Set-Content '{{file}}'",
+        bash: "sed{{#inplace}} -i{{/inplace}} '{{expr}}' {{file}}",
+        mac: "sed{{#inplace}} -i ''{{/inplace}} '{{expr}}' {{file}}"
+      }
+    },
+    {
+      id: 'ping',
+      name: 'Ping host',
+      category: 'Network',
+      params: [
+        { id: 'host', label: 'Host', type: 'text', placeholder: 'example.com or IP', default: '' },
+        { id: 'count', label: 'Count (packets)', type: 'number', placeholder: '4', default: '4' }
+      ],
+      templates: {
+        cmd: 'ping -n {{count}} {{host}}',
+        ps: 'Test-Connection -Count {{count}} {{host}}',
+        bash: 'ping -c {{count}} {{host}}',
+        mac: 'ping -c {{count}} {{host}}'
+      }
+    },
+    {
+      id: 'nslookup',
+      name: 'DNS lookup (nslookup / dig)',
+      category: 'Network',
+      params: [
+        { id: 'domain', label: 'Domain or host', type: 'text', placeholder: 'example.com', default: '' },
+        { id: 'type', label: 'Record type', type: 'select', options: [{ value: 'A', label: 'A' }, { value: 'AAAA', label: 'AAAA' }, { value: 'MX', label: 'MX' }, { value: 'NS', label: 'NS' }, { value: 'TXT', label: 'TXT' }], default: 'A' }
+      ],
+      templates: {
+        cmd: 'nslookup {{domain}}',
+        ps: "Resolve-DnsName -Name '{{domain}}'{{#type}} -Type {{type}}{{/type}}",
+        bash: "dig {{domain}} {{type}} +short",
+        mac: "dig {{domain}} {{type}} +short"
+      }
+    },
+    {
+      id: 'netstat',
+      name: 'Network connections (netstat)',
+      category: 'Network',
+      params: [
+        { id: 'listen', label: 'Listening only', type: 'checkbox', default: true },
+        { id: 'numeric', label: 'Numeric (no resolve)', type: 'checkbox', default: true },
+        { id: 'all', label: 'All connections', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'netstat -an',
+        ps: "Get-NetTCPConnection | Format-Table -AutoSize",
+        bash: 'netstat -tuln',
+        mac: 'netstat -an | grep LISTEN'
+      }
+    },
+    {
+      id: 'mkdir',
+      name: 'Create directory',
+      category: 'File ops',
+      params: [
+        { id: 'path', label: 'Path', type: 'text', placeholder: 'path/to/dir', default: '' },
+        { id: 'parents', label: 'Parents (-p)', type: 'checkbox', default: true }
+      ],
+      templates: {
+        cmd: 'mkdir {{path}}',
+        ps: "New-Item -ItemType Directory{{#parents}} -Force{{/parents}} -Path '{{path}}'",
+        bash: "mkdir{{#parents}} -p{{/parents}} '{{path}}'",
+        mac: "mkdir{{#parents}} -p{{/parents}} '{{path}}'"
+      }
+    },
+    {
+      id: 'rm',
+      name: 'Remove file/dir',
+      category: 'File ops',
+      params: [
+        { id: 'path', label: 'Path', type: 'text', placeholder: 'file or dir', default: '' },
+        { id: 'recursive', label: 'Recursive (-r)', type: 'checkbox', default: false },
+        { id: 'force', label: 'Force (-f)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'del /q {{path}}',
+        ps: "Remove-Item{{#recursive}} -Recurse{{/recursive}}{{#force}} -Force{{/force}} '{{path}}'",
+        bash: "rm{{#recursive}} -r{{/recursive}}{{#force}} -f{{/force}} '{{path}}'",
+        mac: "rm{{#recursive}} -r{{/recursive}}{{#force}} -f{{/force}} '{{path}}'"
+      }
+    },
+    {
+      id: 'cp',
+      name: 'Copy',
+      category: 'File ops',
+      params: [
+        { id: 'source', label: 'Source', type: 'text', placeholder: 'file or dir', default: '' },
+        { id: 'dest', label: 'Destination', type: 'text', placeholder: 'path', default: '' },
+        { id: 'recursive', label: 'Recursive (-r)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'copy {{source}} {{dest}}',
+        ps: "Copy-Item{{#recursive}} -Recurse{{/recursive}} '{{source}}' '{{dest}}'",
+        bash: "cp{{#recursive}} -r{{/recursive}} '{{source}}' '{{dest}}'",
+        mac: "cp{{#recursive}} -r{{/recursive}} '{{source}}' '{{dest}}'"
+      }
+    },
+    {
+      id: 'mv',
+      name: 'Move / rename',
+      category: 'File ops',
+      params: [
+        { id: 'source', label: 'Source', type: 'text', placeholder: 'file or dir', default: '' },
+        { id: 'dest', label: 'Destination', type: 'text', placeholder: 'path', default: '' }
+      ],
+      templates: {
+        cmd: 'move {{source}} {{dest}}',
+        ps: "Move-Item '{{source}}' '{{dest}}'",
+        bash: "mv '{{source}}' '{{dest}}'",
+        mac: "mv '{{source}}' '{{dest}}'"
+      }
+    },
+    {
+      id: 'chmod',
+      name: 'Chmod (permissions)',
+      category: 'File ops',
+      params: [
+        { id: 'mode', label: 'Mode (e.g. 755, 644)', type: 'text', placeholder: '755', default: '' },
+        { id: 'path', label: 'Path', type: 'text', placeholder: 'file or dir', default: '' },
+        { id: 'recursive', label: 'Recursive (-R)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'icacls {{path}} /grant:r users:F',
+        ps: "Get-ChildItem '{{path}}' -Recurse | ForEach-Object { $_.Attributes = 'Normal' }",
+        bash: "chmod{{#recursive}} -R{{/recursive}} {{mode}} '{{path}}'",
+        mac: "chmod{{#recursive}} -R{{/recursive}} {{mode}} '{{path}}'"
+      }
+    },
+    {
+      id: 'tail',
+      name: 'Tail (last lines / follow)',
+      category: 'Text & search',
+      params: [
+        { id: 'file', label: 'File', type: 'text', placeholder: 'file.log', default: '' },
+        { id: 'lines', label: 'Lines', type: 'number', placeholder: '20', default: '20' },
+        { id: 'follow', label: 'Follow (-f)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'powershell Get-Content {{file}} -Tail {{lines}}{{#follow}} -Wait{{/follow}}',
+        ps: "Get-Content '{{file}}' -Tail {{lines}}{{#follow}} -Wait{{/follow}}",
+        bash: "tail -n {{lines}}{{#follow}} -f{{/follow}} '{{file}}'",
+        mac: "tail -n {{lines}}{{#follow}} -f{{/follow}} '{{file}}'"
+      }
+    },
+    {
+      id: 'head',
+      name: 'Head (first lines)',
+      category: 'Text & search',
+      params: [
+        { id: 'file', label: 'File', type: 'text', placeholder: 'file.txt', default: '' },
+        { id: 'lines', label: 'Lines', type: 'number', placeholder: '10', default: '10' }
+      ],
+      templates: {
+        cmd: 'powershell Get-Content {{file}} -Head {{lines}}',
+        ps: "Get-Content '{{file}}' -Head {{lines}}",
+        bash: "head -n {{lines}} '{{file}}'",
+        mac: "head -n {{lines}} '{{file}}'"
+      }
+    },
+    {
+      id: 'base64-enc',
+      name: 'Base64 encode',
+      category: 'Crypto & encoding',
+      params: [
+        { id: 'input', label: 'String to encode', type: 'text', placeholder: 'hello', default: '' }
+      ],
+      templates: {
+        cmd: 'powershell [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("{{input}}"))',
+        ps: "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('{{input}}'))",
+        bash: "echo -n '{{input}}' | base64 -w0",
+        mac: "echo -n '{{input}}' | base64"
+      }
+    },
+    {
+      id: 'base64-dec',
+      name: 'Base64 decode',
+      category: 'Crypto & encoding',
+      params: [
+        { id: 'input', label: 'Base64 string', type: 'text', placeholder: 'aGVsbG8=', default: '' }
+      ],
+      templates: {
+        cmd: 'powershell [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("{{input}}"))',
+        ps: "[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{input}}'))",
+        bash: "echo '{{input}}' | base64 -d",
+        mac: "echo '{{input}}' | base64 -d"
+      }
+    },
+    {
+      id: 'checksum',
+      name: 'File checksum (MD5 / SHA256)',
+      category: 'Crypto & encoding',
+      params: [
+        { id: 'file', label: 'File path', type: 'text', placeholder: 'file.zip', default: '' },
+        { id: 'algo', label: 'Algorithm', type: 'select', options: [{ value: 'md5', label: 'MD5' }, { value: 'sha256', label: 'SHA256' }], default: 'sha256' }
+      ],
+      templates: {
+        cmd: 'certutil -hashfile {{file}} {{algo}}',
+        ps: "Get-FileHash '{{file}}' -Algorithm {{algo}} | Select-Object Hash",
+        bash: "{{algo}}sum '{{file}}'",
+        mac: "shasum -a 256 '{{file}}'"
+      }
+    },
+    {
+      id: 'openssl-hash',
+      name: 'OpenSSL hash file',
+      category: 'Crypto & encoding',
+      params: [
+        { id: 'file', label: 'File path', type: 'text', placeholder: 'file.bin', default: '' },
+        { id: 'algo', label: 'Algorithm', type: 'select', options: [{ value: 'sha256', label: 'SHA256' }, { value: 'md5', label: 'MD5' }, { value: 'sha1', label: 'SHA1' }], default: 'sha256' }
+      ],
+      templates: {
+        cmd: 'openssl dgst -{{algo}} {{file}}',
+        ps: "openssl dgst -{{algo}} '{{file}}'",
+        bash: "openssl dgst -{{algo}} '{{file}}'",
+        mac: "openssl dgst -{{algo}} '{{file}}'"
+      }
+    },
+    {
+      id: 'env',
+      name: 'Run with env vars',
+      category: 'System',
+      params: [
+        { id: 'vars', label: 'Vars (KEY=val KEY2=val)', type: 'text', placeholder: 'DEBUG=1 PORT=3000', default: 'DEBUG=1 PORT=3000' },
+        { id: 'command', label: 'Command', type: 'text', placeholder: 'node app.js', default: 'node app.js' }
+      ],
+      templates: {
+        cmd: 'set DEBUG=1&& set PORT=3000&& {{command}}',
+        ps: "$env:DEBUG='1'; $env:PORT='3000'; {{command}}",
+        bash: "{{vars}} {{command}}",
+        mac: "{{vars}} {{command}}"
+      }
+    },
+    {
+      id: 'date',
+      name: 'Print date / time',
+      category: 'System',
+      params: [
+        { id: 'format', label: 'Format (optional)', type: 'text', placeholder: '%Y-%m-%d %H:%M', default: '' }
+      ],
+      templates: {
+        cmd: 'date /t && time /t',
+        ps: "Get-Date{{#format}} -Format '{{format}}'{{/format}}",
+        bash: "date{{#format}} '+{{format}}'{{/format}}",
+        mac: "date{{#format}} '+{{format}}'{{/format}}"
+      }
+    },
+    {
+      id: 'xargs',
+      name: 'Xargs (run from stdin)',
+      category: 'Text & search',
+      params: [
+        { id: 'command', label: 'Command (use {} for placeholder)', type: 'text', placeholder: 'echo {}', default: '' },
+        { id: 'input', label: 'Input (space-separated)', type: 'text', placeholder: 'a b c', default: '' },
+        { id: 'maxArgs', label: 'Max args per invocation (-n)', type: 'number', placeholder: '1', default: '1' }
+      ],
+      templates: {
+        cmd: 'for %i in ({{input}}) do {{command}}',
+        ps: "'{{input}}'.Split() | ForEach-Object { {{command}} }",
+        bash: "echo '{{input}}' | xargs -n {{maxArgs}} {{command}}",
+        mac: "echo '{{input}}' | xargs -n {{maxArgs}} {{command}}"
+      }
+    },
+    {
+      id: 'whois',
+      name: 'Whois (domain info)',
+      category: 'Network',
+      params: [
+        { id: 'domain', label: 'Domain or IP', type: 'text', placeholder: 'example.com', default: '' }
+      ],
+      templates: {
+        cmd: 'whois {{domain}}',
+        ps: "whois {{domain}}",
+        bash: "whois '{{domain}}'",
+        mac: "whois '{{domain}}'"
+      }
+    },
+    {
+      id: 'netcat',
+      name: 'Netcat (connect or listen)',
+      category: 'Network',
+      params: [
+        { id: 'host', label: 'Host (leave empty to listen)', type: 'text', placeholder: 'example.com', default: '' },
+        { id: 'port', label: 'Port', type: 'number', placeholder: '8080', default: '' },
+        { id: 'listen', label: 'Listen mode (-l)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: '{{#listen}}nc -l -p {{port}}{{/listen}}{{^listen}}nc {{host}} {{port}}{{/listen}}',
+        ps: "Test-NetConnection -ComputerName '{{host}}' -Port {{port}}",
+        bash: "{{#listen}}nc -l -p {{port}}{{/listen}}{{^listen}}nc {{host}} {{port}}{{/listen}}",
+        mac: "{{#listen}}nc -l {{port}}{{/listen}}{{^listen}}nc {{host}} {{port}}{{/listen}}"
+      }
+    },
+    {
+      id: 'traceroute',
+      name: 'Traceroute',
+      category: 'Network',
+      params: [
+        { id: 'host', label: 'Host', type: 'text', placeholder: 'example.com', default: '' }
+      ],
+      templates: {
+        cmd: 'tracert {{host}}',
+        ps: "Test-NetConnection -ComputerName '{{host}}' -TraceRoute",
+        bash: "traceroute '{{host}}'",
+        mac: "traceroute '{{host}}'"
+      }
+    },
+    {
+      id: 'curl-post',
+      name: 'Curl POST request',
+      category: 'Network',
+      params: [
+        { id: 'url', label: 'URL', type: 'text', placeholder: 'https://api.example.com', default: '' },
+        { id: 'data', label: 'Body (e.g. JSON)', type: 'text', placeholder: '{"key":"value"}', default: '' },
+        { id: 'contentType', label: 'Content-Type', type: 'text', placeholder: 'application/json', default: 'application/json' }
+      ],
+      templates: {
+        cmd: 'curl -X POST -H "Content-Type: {{contentType}}" -d "{{data}}" {{url}}',
+        ps: "Invoke-RestMethod -Uri '{{url}}' -Method Post -ContentType '{{contentType}}' -Body '{{data}}'",
+        bash: "curl -X POST -H 'Content-Type: {{contentType}}' -d '{{data}}' '{{url}}'",
+        mac: "curl -X POST -H 'Content-Type: {{contentType}}' -d '{{data}}' '{{url}}'"
+      }
+    },
+    {
+      id: 'sleep',
+      name: 'Sleep (pause)',
+      category: 'System',
+      params: [
+        { id: 'seconds', label: 'Seconds', type: 'number', placeholder: '5', default: '1' }
+      ],
+      templates: {
+        cmd: 'timeout /t {{seconds}}',
+        ps: "Start-Sleep -Seconds {{seconds}}",
+        bash: "sleep {{seconds}}",
+        mac: "sleep {{seconds}}"
+      }
+    },
+    {
+      id: 'touch',
+      name: 'Touch (create/update file time)',
+      category: 'File ops',
+      params: [
+        { id: 'path', label: 'File path', type: 'text', placeholder: 'file.txt', default: '' }
+      ],
+      templates: {
+        cmd: 'type nul > {{path}}',
+        ps: "New-Item -Path '{{path}}' -ItemType File -Force",
+        bash: "touch '{{path}}'",
+        mac: "touch '{{path}}'"
+      }
+    },
+    {
+      id: 'ln',
+      name: 'Symlink (ln -s)',
+      category: 'File ops',
+      params: [
+        { id: 'target', label: 'Target (existing file/dir)', type: 'text', placeholder: '/path/to/source', default: '' },
+        { id: 'link', label: 'Link path (new symlink)', type: 'text', placeholder: 'linkname', default: '' }
+      ],
+      templates: {
+        cmd: 'mklink /D {{link}} {{target}}',
+        ps: "New-Item -ItemType SymbolicLink -Path '{{link}}' -Target '{{target}}'",
+        bash: "ln -s '{{target}}' '{{link}}'",
+        mac: "ln -s '{{target}}' '{{link}}'"
+      }
+    },
+    {
+      id: 'df',
+      name: 'Disk free (df)',
+      category: 'System',
+      params: [
+        { id: 'human', label: 'Human-readable (-h)', type: 'checkbox', default: true }
+      ],
+      templates: {
+        cmd: 'wmic logicaldisk get size,freespace,caption',
+        ps: "Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N='Used(GB)';E={[math]::Round($_.Used/1GB,2)}}, @{N='Free(GB)';E={[math]::Round($_.Free/1GB,2)}}",
+        bash: "df{{#human}} -h{{/human}}",
+        mac: "df{{#human}} -h{{/human}}"
+      }
+    },
+    {
+      id: 'du',
+      name: 'Disk usage (du)',
+      category: 'System',
+      params: [
+        { id: 'path', label: 'Path (optional)', type: 'text', placeholder: '.', default: '.' },
+        { id: 'human', label: 'Human-readable (-h)', type: 'checkbox', default: true },
+        { id: 'summarize', label: 'Summary only (-s)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'dir /s {{path}}',
+        ps: "Get-ChildItem -Path '{{path}}' -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum",
+        bash: "du{{#human}} -h{{/human}}{{#summarize}} -s{{/summarize}} '{{path}}'",
+        mac: "du{{#human}} -h{{/human}}{{#summarize}} -s{{/summarize}} '{{path}}'"
+      }
+    },
+    {
+      id: 'ps',
+      name: 'Process list (ps)',
+      category: 'System',
+      params: [
+        { id: 'all', label: 'All processes (-a / -e)', type: 'checkbox', default: true },
+        { id: 'wide', label: 'Wide output', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'tasklist',
+        ps: "Get-Process{{#wide}} | Format-Table -AutoSize{{/wide}}",
+        bash: "ps{{#all}} aux{{/all}}{{#wide}} -ww{{/wide}}",
+        mac: "ps{{#all}} aux{{/all}}{{#wide}} -ww{{/wide}}"
+      }
+    },
+    {
+      id: 'kill',
+      name: 'Kill process',
+      category: 'System',
+      params: [
+        { id: 'pid', label: 'PID', type: 'number', placeholder: '1234', default: '' },
+        { id: 'signal', label: 'Signal', type: 'select', options: [{ value: '', label: 'TERM (15)' }, { value: '-9', label: 'KILL (9)' }, { value: '-2', label: 'INT (2)' }], default: '' }
+      ],
+      templates: {
+        cmd: 'taskkill /PID {{pid}}',
+        ps: "Stop-Process -Id {{pid}}{{#signal}} -Force{{/signal}}",
+        bash: "kill {{signal}} {{pid}}",
+        mac: "kill {{signal}} {{pid}}"
+      }
+    },
+    {
+      id: 'which',
+      name: 'Which (command path)',
+      category: 'System',
+      params: [
+        { id: 'command', label: 'Command name', type: 'text', placeholder: 'node', default: '' }
+      ],
+      templates: {
+        cmd: 'where {{command}}',
+        ps: "Get-Command '{{command}}' | Select-Object -ExpandProperty Source",
+        bash: "which '{{command}}'",
+        mac: "which '{{command}}'"
+      }
+    },
+    {
+      id: 'pwd',
+      name: 'Print working directory',
+      category: 'System',
+      params: [],
+      templates: {
+        cmd: 'cd',
+        ps: 'Get-Location',
+        bash: 'pwd',
+        mac: 'pwd'
+      }
+    },
+    {
+      id: 'whoami',
+      name: 'Who am I (current user)',
+      category: 'System',
+      params: [],
+      templates: {
+        cmd: 'echo %USERNAME%',
+        ps: 'whoami',
+        bash: 'whoami',
+        mac: 'whoami'
+      }
+    },
+    {
+      id: 'hostname',
+      name: 'Hostname',
+      category: 'System',
+      params: [],
+      templates: {
+        cmd: 'hostname',
+        ps: 'hostname',
+        bash: 'hostname',
+        mac: 'hostname'
+      }
+    },
+    {
+      id: 'uname',
+      name: 'Uname (system info)',
+      category: 'System',
+      params: [
+        { id: 'all', label: 'All (-a)', type: 'checkbox', default: true }
+      ],
+      templates: {
+        cmd: 'ver',
+        ps: "[Environment]::OSVersion.VersionString; $env:PROCESSOR_ARCHITECTURE",
+        bash: "uname{{#all}} -a{{/all}}",
+        mac: "uname{{#all}} -a{{/all}}"
+      }
+    },
+    {
+      id: 'echo',
+      name: 'Echo (print)',
+      category: 'Text & search',
+      params: [
+        { id: 'text', label: 'Text', type: 'text', placeholder: 'Hello world', default: '' },
+        { id: 'noNewline', label: 'No newline (-n)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'echo {{text}}',
+        ps: "Write-Host{{#noNewline}} -NoNewline{{/noNewline}} '{{text}}'",
+        bash: "echo{{#noNewline}} -n{{/noNewline}} '{{text}}'",
+        mac: "echo{{#noNewline}} -n{{/noNewline}} '{{text}}'"
+      }
+    },
+    {
+      id: 'cat',
+      name: 'Cat (show file)',
+      category: 'Text & search',
+      params: [
+        { id: 'file', label: 'File path', type: 'text', placeholder: 'file.txt', default: '' }
+      ],
+      templates: {
+        cmd: 'type {{file}}',
+        ps: "Get-Content '{{file}}'",
+        bash: "cat '{{file}}'",
+        mac: "cat '{{file}}'"
+      }
+    },
+    {
+      id: 'tee',
+      name: 'Tee (stdin to file + stdout)',
+      category: 'Text & search',
+      params: [
+        { id: 'file', label: 'Output file', type: 'text', placeholder: 'out.txt', default: '' },
+        { id: 'append', label: 'Append (-a)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'powershell "input | Tee-Object -FilePath {{file}}"',
+        ps: "| Tee-Object -FilePath '{{file}}'{{#append}} -Append{{/append}}",
+        bash: "tee{{#append}} -a{{/append}} '{{file}}'",
+        mac: "tee{{#append}} -a{{/append}} '{{file}}'"
+      }
+    },
+    {
+      id: 'wc',
+      name: 'Word/line count (wc)',
+      category: 'Text & search',
+      params: [
+        { id: 'file', label: 'File (optional)', type: 'text', placeholder: 'file.txt', default: '' },
+        { id: 'lines', label: 'Lines only (-l)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'find /c /v "" < {{file}}',
+        ps: "(Get-Content '{{file}}').Count",
+        bash: "wc{{#lines}} -l{{/lines}} {{file}}",
+        mac: "wc{{#lines}} -l{{/lines}} {{file}}"
+      }
+    },
+    {
+      id: 'sort',
+      name: 'Sort lines',
+      category: 'Text & search',
+      params: [
+        { id: 'file', label: 'File (optional)', type: 'text', placeholder: 'file.txt', default: '' },
+        { id: 'numeric', label: 'Numeric (-n)', type: 'checkbox', default: false },
+        { id: 'reverse', label: 'Reverse (-r)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'sort {{file}}',
+        ps: "Get-Content '{{file}}' | Sort-Object",
+        bash: "sort{{#numeric}} -n{{/numeric}}{{#reverse}} -r{{/reverse}} {{file}}",
+        mac: "sort{{#numeric}} -n{{/numeric}}{{#reverse}} -r{{/reverse}} {{file}}"
+      }
+    },
+    {
+      id: 'uniq',
+      name: 'Uniq (dedupe adjacent lines)',
+      category: 'Text & search',
+      params: [
+        { id: 'file', label: 'File (optional)', type: 'text', placeholder: 'file.txt', default: '' },
+        { id: 'count', label: 'Show count (-c)', type: 'checkbox', default: false }
+      ],
+      templates: {
+        cmd: 'powershell Get-Content {{file}} | Sort-Object -Unique',
+        ps: "Get-Content '{{file}}' | Sort-Object -Unique",
+        bash: "uniq{{#count}} -c{{/count}} {{file}}",
+        mac: "uniq{{#count}} -c{{/count}} {{file}}"
+      }
+    },
+    {
+      id: 'diff',
+      name: 'Diff (compare files)',
+      category: 'Text & search',
+      params: [
+        { id: 'file1', label: 'File 1', type: 'text', placeholder: 'a.txt', default: '' },
+        { id: 'file2', label: 'File 2', type: 'text', placeholder: 'b.txt', default: '' }
+      ],
+      templates: {
+        cmd: 'fc {{file1}} {{file2}}',
+        ps: "Compare-Object (Get-Content '{{file1}}') (Get-Content '{{file2}}')",
+        bash: "diff '{{file1}}' '{{file2}}'",
+        mac: "diff '{{file1}}' '{{file2}}'"
+      }
+    },
+    {
+      id: 'timeout',
+      name: 'Timeout (run with time limit)',
+      category: 'System',
+      params: [
+        { id: 'seconds', label: 'Seconds', type: 'number', placeholder: '10', default: '' },
+        { id: 'command', label: 'Command', type: 'text', placeholder: 'long-running-cmd', default: '' }
+      ],
+      templates: {
+        cmd: 'timeout /t {{seconds}}',
+        ps: "$job = Start-Job { {{command}} }; Wait-Job $job -Timeout {{seconds}}; Stop-Job $job",
+        bash: "timeout {{seconds}} {{command}}",
+        mac: "gtimeout {{seconds}} {{command}}"
+      }
+    },
+    {
+      id: 'nohup',
+      name: 'Nohup (run immune to hangups)',
+      category: 'System',
+      params: [
+        { id: 'command', label: 'Command', type: 'text', placeholder: 'node server.js', default: '' },
+        { id: 'redirect', label: 'Redirect to nohup.out', type: 'checkbox', default: true }
+      ],
+      templates: {
+        cmd: 'start /b {{command}}',
+        ps: "Start-Process -NoNewWindow -FilePath 'cmd' -ArgumentList '/c', '{{command}}'",
+        bash: "nohup {{command}}{{#redirect}} > nohup.out 2>&1{{/redirect}} &",
+        mac: "nohup {{command}}{{#redirect}} > nohup.out 2>&1{{/redirect}} &"
+      }
+    },
+    {
+      id: 'export',
+      name: 'Export env var (current shell)',
+      category: 'System',
+      params: [
+        { id: 'key', label: 'Variable name', type: 'text', placeholder: 'MY_VAR', default: '' },
+        { id: 'value', label: 'Value', type: 'text', placeholder: 'value', default: '' }
+      ],
+      templates: {
+        cmd: 'set {{key}}={{value}}',
+        ps: "$env:{{key}} = '{{value}}'",
+        bash: "export {{key}}='{{value}}'",
+        mac: "export {{key}}='{{value}}'"
+      }
+    },
+    {
+      id: 'tar-list',
+      name: 'Tar list contents',
+      category: 'File ops',
+      params: [
+        { id: 'archive', label: 'Archive path', type: 'text', placeholder: 'file.tar.gz', default: '' },
+        { id: 'gzip', label: 'Gzip (.gz)', type: 'checkbox', default: true }
+      ],
+      templates: {
+        cmd: 'tar -t{{#gzip}}z{{/gzip}}f {{archive}}',
+        ps: "tar -t{{#gzip}}z{{/gzip}}f '{{archive}}'",
+        bash: "tar -t{{#gzip}}z{{/gzip}}f '{{archive}}'",
+        mac: "tar -t{{#gzip}}z{{/gzip}}f '{{archive}}'"
+      }
+    }
+  ];
+
+  var DESCRIPTIONS = {
+    'curl': 'Download a file from a URL. Options: follow redirects, silent, skip SSL verification, save to file.',
+    'wget': 'Download a file (Bash/Mac). On Windows uses curl or Invoke-WebRequest.',
+    'ssh': 'Connect to a remote host over SSH. Use key file, custom port, optional remote command.',
+    'scp': 'Copy files between hosts over SSH. Supports key, port, and recursive copy.',
+    'rsync': 'Sync files locally or over SSH. Archive mode, delete, exclude patterns. Use WSL on Windows for native rsync.',
+    'tar-extract': 'Extract a tar archive (optionally gzipped). Optionally extract to a directory.',
+    'tar-create': 'Create a tar archive from files or directories. Optionally gzip.',
+    'tar-list': 'List contents of a tar archive without extracting.',
+    'grep': 'Search for a pattern in files. Recursive, ignore case, line numbers.',
+    'find': 'Find files by path and name pattern. Filter by type (file or directory).',
+    'sed-replace': 'Stream edit: replace text in a file. In-place edit on Bash/Mac.',
+    'ping': 'Test reachability of a host. Send a fixed number of packets.',
+    'nslookup': 'DNS lookup: resolve domain to IP (A, AAAA, MX, NS, TXT).',
+    'netstat': 'Show network connections. Listening ports, numeric addresses.',
+    'mkdir': 'Create directory. Create parent directories with -p.',
+    'rm': 'Remove files or directories. Recursive and force options.',
+    'cp': 'Copy files or directories. Recursive copy.',
+    'mv': 'Move or rename files and directories.',
+    'chmod': 'Change file permissions (e.g. 755, 644). Recursive with -R. Unix/Mac only.',
+    'tail': 'Show last lines of a file. Follow mode for live updates.',
+    'head': 'Show first lines of a file.',
+    'base64-enc': 'Base64-encode a string.',
+    'base64-dec': 'Base64-decode a string.',
+    'checksum': 'Compute file hash: MD5 or SHA256. Cross-platform equivalents.',
+    'openssl-hash': 'Compute file digest with OpenSSL (SHA256, MD5, SHA1).',
+    'env': 'Run a command with one or more environment variables set (KEY=val).',
+    'date': 'Print current date and time. Optional format string.',
+    'xargs': 'Build and run commands from stdin. Use {} as placeholder, -n for max args.',
+    'whois': 'Query domain or IP registration (WHOIS).',
+    'netcat': 'Connect to a host:port or listen on a port. Raw TCP.',
+    'traceroute': 'Show route packets take to a host.',
+    'curl-post': 'Send an HTTP POST request with a body (e.g. JSON).',
+    'sleep': 'Pause execution for a number of seconds.',
+    'touch': 'Create an empty file or update its modification time.',
+    'ln': 'Create a symbolic link. Target and link path.',
+    'df': 'Show disk free space. Human-readable units.',
+    'du': 'Show disk usage of files/directories. Human-readable, summary only.',
+    'ps': 'List running processes. All processes, wide output.',
+    'kill': 'Terminate a process by PID. Optional signal (e.g. KILL -9).',
+    'which': 'Show full path of a command.',
+    'pwd': 'Print current working directory.',
+    'whoami': 'Print current username.',
+    'hostname': 'Print system hostname.',
+    'uname': 'Print system information (kernel, machine). -a for all.',
+    'echo': 'Print text to stdout. No newline with -n.',
+    'cat': 'Output contents of a file.',
+    'tee': 'Read stdin, write to a file and pass through to stdout. Append with -a.',
+    'wc': 'Count lines, words, or bytes. Lines only with -l.',
+    'sort': 'Sort lines. Numeric sort, reverse order.',
+    'uniq': 'Remove duplicate adjacent lines. Show count with -c.',
+    'diff': 'Compare two files line by line.',
+    'timeout': 'Run a command with a time limit (seconds).',
+    'nohup': 'Run a command immune to hangups; keeps running after terminal closes.',
+    'export': 'Set an environment variable in the current shell (persists for session).'
+  };
+  COMMANDS.forEach(function (c) { c.description = DESCRIPTIONS[c.id] || ''; });
+
+  // PowerShell grep: Select-String
+  COMMANDS.find(function (c) { return c.id === 'grep'; }).templates.ps = "Select-String -Pattern '{{pattern}}'{{#path}} -Path '{{path}}'{{/path}}{{#recursive}} -Recurse{{/recursive}}{{#lineNumber}} | ForEach-Object { \"$($_.LineNumber): $($_.Line)\" }{{/lineNumber}}";
+
+  // Find: PowerShell
+  COMMANDS.find(function (c) { return c.id === 'find'; }).templates.ps = "Get-ChildItem -Path '{{path}}' -Recurse{{#name}} -Filter '{{name}}'{{/name}}";
+
+  // Checksum Mac: shasum -a 256 or md5 (no sha256sum)
+  COMMANDS.find(function (c) { return c.id === 'checksum'; }).templates.mac = "openssl {{algo}} '{{file}}'";
+
+  function getState(cmd) {
+    var state = {};
+    cmd.params.forEach(function (p) {
+      var el = document.getElementById('p-' + cmd.id + '-' + p.id);
+      if (!el) return;
+      if (p.type === 'checkbox') state[p.id] = el.checked;
+      else if (p.type === 'select') state[p.id] = el.value;
+      else state[p.id] = el.value;
+    });
+    return state;
+  }
+
+  function buildOutput(cmd) {
+    var state = getState(cmd);
+    return {
+      cmd: cmd.templates.cmd ? tmpl(cmd.templates.cmd, state) : '—',
+      ps: cmd.templates.ps ? tmpl(cmd.templates.ps, state) : '—',
+      bash: cmd.templates.bash ? tmpl(cmd.templates.bash, state) : '—',
+      mac: cmd.templates.mac ? tmpl(cmd.templates.mac, state) : '—'
+    };
+  }
+
+  function renderForm(cmd) {
+    var root = document.getElementById('form-area');
+    root.innerHTML = '';
+    var title = document.createElement('h2');
+    title.textContent = cmd.name;
+    title.style.marginTop = '0';
+    title.style.fontSize = '1.1rem';
+    root.appendChild(title);
+    if (cmd.description) {
+      var desc = document.createElement('p');
+      desc.className = 'cmd-description';
+      desc.textContent = cmd.description;
+      root.appendChild(desc);
+    }
+    cmd.params.forEach(function (p) {
+      var row = document.createElement('div');
+      row.className = 'form-row';
+      var label = document.createElement('label');
+      label.setAttribute('for', 'p-' + cmd.id + '-' + p.id);
+      label.textContent = p.label;
+      row.appendChild(label);
+      var el;
+      if (p.type === 'checkbox') {
+        el = document.createElement('input');
+        el.type = 'checkbox';
+        el.checked = p.default === true;
+      } else if (p.type === 'select') {
+        el = document.createElement('select');
+        (p.options || []).forEach(function (opt) {
+          var o = document.createElement('option');
+          o.value = opt.value;
+          o.textContent = opt.label;
+          if (opt.value === p.default) o.selected = true;
+          el.appendChild(o);
+        });
+      } else {
+        el = document.createElement('input');
+        el.type = p.type === 'number' ? 'number' : 'text';
+        el.placeholder = p.placeholder || '';
+        el.value = p.default != null ? p.default : '';
+      }
+      el.id = 'p-' + cmd.id + '-' + p.id;
+      row.appendChild(el);
+      root.appendChild(row);
+    });
+    var update = function () {
+      var out = buildOutput(cmd);
+      ['cmd', 'ps', 'bash', 'mac'].forEach(function (plat) {
+        var block = document.getElementById('out-' + plat);
+        var text = out[plat];
+        block.textContent = text || '—';
+        block.classList.toggle('empty', !text || text === '—');
+      });
+    };
+    root.querySelectorAll('input, select').forEach(function (el) {
+      el.addEventListener('input', update);
+      el.addEventListener('change', update);
+    });
+    update();
+  }
+
+  function renderCommandList(filter) {
+    var list = document.getElementById('command-list');
+    list.innerHTML = '';
+    var q = (filter || '').toLowerCase().trim();
+    CATEGORIES.forEach(function (cat) {
+      var cmds = COMMANDS.filter(function (c) {
+        if (c.category !== cat) return false;
+        if (!q) return true;
+        return c.name.toLowerCase().indexOf(q) >= 0 || c.id.indexOf(q) >= 0 ||
+          (c.description && c.description.toLowerCase().indexOf(q) >= 0);
+      });
+      if (cmds.length === 0) return;
+      var h2 = document.createElement('h2');
+      h2.textContent = cat;
+      list.appendChild(h2);
+      cmds.forEach(function (c) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'cmd-btn';
+        btn.textContent = c.name;
+        btn.dataset.id = c.id;
+        btn.addEventListener('click', function () {
+          list.querySelectorAll('.cmd-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          currentCmd = c;
+          setCmdInUrl(c.id);
+          renderForm(c);
+        });
+        list.appendChild(btn);
+      });
+    });
+    var activeBtn = list.querySelector('.cmd-btn.active');
+    if (!activeBtn) {
+      var wantedId = getCmdFromUrl();
+      var wanted = wantedId && COMMANDS.some(function (c) { return c.id === wantedId; });
+      if (wanted) {
+        activeBtn = list.querySelector('.cmd-btn[data-id="' + wantedId + '"]');
+      }
+      if (!activeBtn) activeBtn = list.querySelector('.cmd-btn');
+      if (activeBtn) {
+        activeBtn.classList.add('active');
+        currentCmd = COMMANDS.find(function (c) { return c.id === activeBtn.dataset.id; });
+        if (currentCmd) {
+          setCmdInUrl(currentCmd.id);
+          renderForm(currentCmd);
+        }
+      }
+    }
+  }
+
+  function getCmdFromUrl() {
+    var params = new URLSearchParams(window.location.search);
+    return params.get('cmd') || '';
+  }
+
+  function setCmdInUrl(id) {
+    var nextQuery = id ? '?cmd=' + encodeURIComponent(id) : '';
+    if (window !== window.top) {
+      try {
+        window.parent.postMessage(
+          { type: 'helpers-set-query', query: id ? { cmd: id } : {} },
+          window.location.origin
+        );
+      } catch (_) {}
+    } else {
+      var url = window.location.pathname + nextQuery;
+      if (window.location.search !== nextQuery) history.replaceState(null, '', url);
+    }
+  }
+
+  var currentCmd = null;
+  document.getElementById('search').addEventListener('input', function () {
+    renderCommandList(this.value);
+  });
+
+  document.getElementById('out-section').addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy-btn');
+    if (!btn || !btn.dataset.copy) return;
+    var plat = btn.dataset.copy;
+    var block = document.getElementById('out-' + plat);
+    var text = block.textContent.trim();
+    if (text && text !== '—') {
+      navigator.clipboard.writeText(text).then(function () {
+        btn.classList.add('copied');
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.classList.remove('copied'); btn.textContent = 'Copy'; }, 1500);
+      });
+    }
+  });
+
+  renderCommandList();
+})();
+  </script>
+</body>
+</html>

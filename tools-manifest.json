@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T00:58:26.280Z",
+  "generatedAt": "2026-02-09T01:08:47.219Z",
   "categories": [
     "Text",
     "Encoding",
@@ -245,6 +245,27 @@
         "reference"
       ],
       "order": 4,
+      "icon": "⌨️"
+    },
+    {
+      "id": "shell-oneliner",
+      "path": "tools/shell-oneliner/",
+      "name": "Shell one-liner",
+      "category": "Other",
+      "description": "Build shell one-liners for common commands: CMD, PowerShell, Bash, Mac. Variables and flags per command.",
+      "keywords": [
+        "shell",
+        "oneliner",
+        "cmd",
+        "powershell",
+        "bash",
+        "mac",
+        "ssh",
+        "curl",
+        "grep",
+        "reference"
+      ],
+      "order": 5,
       "icon": "⌨️"
     }
   ]
