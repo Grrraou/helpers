@@ -36,12 +36,25 @@
     .tz-filter { width: 10rem; padding: 0.25rem 0.5rem; font-size: 0.8rem; border: 1px solid #ddd; border-radius: 4px; color: #333; }
     .tz-filter::placeholder { color: #999; }
     .tz-filter:focus { outline: none; border-color: #999; }
+    input[type="date"], input[type="time"] { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    input[type="date"]:focus, input[type="time"]:focus { outline: none; border-color: #1a73e8; }
+    .picker-row { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+    .picker-row label { margin-bottom: 0; }
+    .note { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
   </style>
 </head>
 <body>
   <div class="row">
     <label for="input">Timestamp or date</label>
     <input type="text" id="input" placeholder="Unix seconds, Unix ms, or ISO 8601 (e.g. 1707350400 or 2024-02-08T12:00:00Z)" />
+  </div>
+  <div class="row">
+    <label>Or pick date &amp; time</label>
+    <div class="picker-row">
+      <input type="date" id="pickerDate" aria-label="Date" />
+      <input type="time" id="pickerTime" value="00:00" step="1" aria-label="Time" />
+    </div>
+    <p class="note">Uses your local time zone. Changing the picker updates the timestamp above.</p>
   </div>
   <button type="button" id="now">Now</button>
   <button type="button" id="convert">Convert</button>
@@ -92,12 +105,38 @@
   <script>
     (function () {
       var input = document.getElementById('input');
+      var pickerDate = document.getElementById('pickerDate');
+      var pickerTime = document.getElementById('pickerTime');
       var result = document.getElementById('result');
       var errorEl = document.getElementById('error');
       var canonicalEl = document.getElementById('canonical');
       var tzTable = document.getElementById('tzTable');
       var tzNoteEl = document.getElementById('tzNote');
       var tzFilter = document.getElementById('tzFilter');
+
+      function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+      function dateTimeFromPickers() {
+        var d = (pickerDate.value || '').trim();
+        var t = (pickerTime.value || '00:00').trim();
+        if (!d) return null;
+        if (t.split(':').length === 2) t = t + ':00';
+        var date = new Date(d + 'T' + t);
+        return isNaN(date.getTime()) ? null : date;
+      }
+
+      function updatePickersFromDate(date) {
+        pickerDate.value = date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());
+        pickerTime.value = pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
+      }
+
+      function onPickerChange() {
+        var date = dateTimeFromPickers();
+        if (date) {
+          input.value = String(date.getTime());
+          run();
+        }
+      }
 
       function getBrowserTimeZoneName() {
         try {
@@ -259,6 +298,7 @@
           result.style.display = 'none';
           return;
         }
+        updatePickersFromDate(date);
         result.style.display = 'block';
         render(date);
       }
@@ -272,11 +312,17 @@
 
       document.getElementById('clear').onclick = function () {
         input.value = '';
+        if (pickerDate) pickerDate.value = '';
+        if (pickerTime) pickerTime.value = '00:00';
         if (tzFilter) tzFilter.value = '';
         result.style.display = 'none';
         errorEl.style.display = 'none';
         if (window.parent !== window) window.parent.postMessage({ type: 'helpers-set-query', query: {} }, location.origin);
       };
+
+      if (pickerDate) pickerDate.addEventListener('change', onPickerChange);
+      if (pickerTime) pickerTime.addEventListener('change', onPickerChange);
+      if (pickerTime) pickerTime.addEventListener('input', onPickerChange);
 
       function applyTzFilter() {
         var q = (tzFilter && tzFilter.value || '').trim().toLowerCase();
@@ -300,6 +346,10 @@
 
       input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') { run(); pushQuery(); }
+      });
+      input.addEventListener('change', function () {
+        run();
+        pushQuery();
       });
 
       function pushQuery() {

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T02:03:22.395Z",
+  "generatedAt": "2026-02-09T02:18:11.874Z",
   "categories": [
     "Text",
     "Encoding",
@@ -383,6 +383,25 @@
       ],
       "order": 9,
       "icon": "∠"
+    },
+    {
+      "id": "countdown",
+      "path": "tools/countdown/",
+      "name": "Countdown",
+      "category": "Other",
+      "description": "Time until a date: countdown in seconds, minutes, hours, days and weeks. Updates in real time.",
+      "keywords": [
+        "countdown",
+        "time",
+        "date",
+        "seconds",
+        "minutes",
+        "hours",
+        "days",
+        "until"
+      ],
+      "order": 10,
+      "icon": "⏱️"
     }
   ]
 }
