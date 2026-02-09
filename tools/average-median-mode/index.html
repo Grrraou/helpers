@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Average / median / mode calculator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, textarea { -webkit-user-select: text; user-select: text; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; background: #f0f1f3; color: #1a1a1a; font-size: 0.95rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
+    .note { font-size: 0.85rem; color: #555; margin: 0 0 1rem 0; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+    .calc-block { background: #fff; border-radius: 10px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e5e7eb; }
+    .calc-block h2 { margin: 0 0 0.5rem 0; font-size: 0.95rem; color: #333; }
+    .examples { font-size: 0.75rem; color: #6b7280; margin-bottom: 0.75rem; padding: 0.4rem 0; border-bottom: 1px dashed #e5e7eb; }
+    label { display: block; margin-bottom: 0.2rem; font-weight: 500; font-size: 0.9rem; }
+    .row { margin-bottom: 0.6rem; }
+    textarea { width: 100%; min-height: 100px; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; font-family: ui-monospace, monospace; resize: vertical; }
+    textarea:focus { outline: none; border-color: #1a73e8; }
+    .result { margin-top: 0.6rem; font-size: 0.95rem; font-family: ui-monospace, monospace; font-weight: 500; color: #1a73e8; line-height: 1.35; }
+    .result.empty { color: #9ca3af; font-weight: normal; }
+    .result.error { color: #c00; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; margin-top: 0.75rem; }
+    .stat-item { background: #f8f9fa; border-radius: 6px; padding: 0.5rem 0.65rem; }
+    .stat-item .label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; margin-bottom: 0.2rem; }
+    .stat-item .value { font-family: ui-monospace, monospace; font-size: 0.95rem; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <h1>Average / median / mode calculator</h1>
+  <p class="note">Enter numbers separated by commas, spaces, or newlines. You get the <strong>mean</strong> (average), <strong>median</strong> (middle value), and <strong>mode</strong> (most frequent). Count, sum, min and max are shown too.</p>
+
+  <div class="card-grid">
+  <div class="calc-block" id="card-main">
+    <h2>Numbers</h2>
+    <p class="examples">e.g. 10, 20, 30, 40, 50 — or one per line (grades, prices, etc.)</p>
+    <div class="row">
+      <label for="numbers">List of numbers</label>
+      <textarea id="numbers" placeholder="e.g. 5, 12, 8, 12, 3, 12" inputmode="decimal"></textarea>
+    </div>
+    <p class="result" id="result">—</p>
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-item"><div class="label">Count</div><div class="value" id="statCount">—</div></div>
+      <div class="stat-item"><div class="label">Sum</div><div class="value" id="statSum">—</div></div>
+      <div class="stat-item"><div class="label">Mean (average)</div><div class="value" id="statMean">—</div></div>
+      <div class="stat-item"><div class="label">Median</div><div class="value" id="statMedian">—</div></div>
+      <div class="stat-item"><div class="label">Mode</div><div class="value" id="statMode">—</div></div>
+      <div class="stat-item"><div class="label">Min</div><div class="value" id="statMin">—</div></div>
+      <div class="stat-item"><div class="label">Max</div><div class="value" id="statMax">—</div></div>
+    </div>
+  </div>
+  </div>
+
+  <script>
+(function () {
+  var numbersEl = document.getElementById('numbers');
+  var resultEl = document.getElementById('result');
+  var statCount = document.getElementById('statCount');
+  var statSum = document.getElementById('statSum');
+  var statMean = document.getElementById('statMean');
+  var statMedian = document.getElementById('statMedian');
+  var statMode = document.getElementById('statMode');
+  var statMin = document.getElementById('statMin');
+  var statMax = document.getElementById('statMax');
+
+  function parseInput(str) {
+    if (str == null || (str = String(str).trim()) === '') return [];
+    var parts = str.split(/[\s,;\t]+/);
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var s = parts[i].trim();
+      if (s === '') continue;
+      var n = parseFloat(s.replace(/,/g, ''));
+      if (isFinite(n)) out.push(n);
+    }
+    return out;
+  }
+
+  function mean(arr) {
+    if (arr.length === 0) return NaN;
+    var sum = 0;
+    for (var i = 0; i < arr.length; i++) sum += arr[i];
+    return sum / arr.length;
+  }
+
+  function median(arr) {
+    if (arr.length === 0) return NaN;
+    var a = arr.slice().sort(function (x, y) { return x - y; });
+    var mid = Math.floor(a.length / 2);
+    if (a.length % 2 === 1) return a[mid];
+    return (a[mid - 1] + a[mid]) / 2;
+  }
+
+  function mode(arr) {
+    if (arr.length === 0) return [];
+    var counts = {};
+    var maxCount = 0;
+    for (var i = 0; i < arr.length; i++) {
+      var x = arr[i];
+      counts[x] = (counts[x] || 0) + 1;
+      if (counts[x] > maxCount) maxCount = counts[x];
+    }
+    if (maxCount <= 1) return [];
+    var out = [];
+    for (var key in counts) {
+      if (counts[key] === maxCount) out.push(parseFloat(key));
+    }
+    out.sort(function (a, b) { return a - b; });
+    return out;
+  }
+
+  function formatNum(n) {
+    if (n !== n) return '—';
+    if (Number.isInteger(n)) return String(n);
+    var s = n.toFixed(4).replace(/\.?0+$/, '');
+    return s;
+  }
+
+  function syncUrl() {
+    var raw = (numbersEl.value || '').trim();
+    var params = new URLSearchParams(window.location.search);
+    if (raw) params.set('n', raw.replace(/\s+/g, ',')); else params.delete('n');
+    var qs = params.toString();
+    var url = window.location.pathname + (qs ? '?' + qs : '');
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'helpers-set-query', query: Object.fromEntries(params) }, '*');
+    } else {
+      window.history.replaceState(null, '', url);
+    }
+  }
+
+  function run() {
+    var raw = (numbersEl.value || '').trim();
+    var arr = parseInput(raw);
+
+    if (arr.length === 0) {
+      resultEl.textContent = 'Enter at least one number.';
+      resultEl.className = 'result empty';
+      statCount.textContent = '—';
+      statSum.textContent = '—';
+      statMean.textContent = '—';
+      statMedian.textContent = '—';
+      statMode.textContent = '—';
+      statMin.textContent = '—';
+      statMax.textContent = '—';
+      syncUrl();
+      return;
+    }
+
+    var m = mean(arr);
+    var med = median(arr);
+    var mod = mode(arr);
+    var sum = arr.reduce(function (a, b) { return a + b; }, 0);
+    var min = Math.min.apply(null, arr);
+    var max = Math.max.apply(null, arr);
+
+    statCount.textContent = arr.length;
+    statSum.textContent = formatNum(sum);
+    statMean.textContent = formatNum(m);
+    statMedian.textContent = formatNum(med);
+    if (mod.length === 0) {
+      statMode.textContent = 'No mode (all values appear once)';
+    } else if (mod.length === 1) {
+      statMode.textContent = formatNum(mod[0]);
+    } else {
+      statMode.textContent = mod.map(formatNum).join(', ');
+    }
+    statMin.textContent = formatNum(min);
+    statMax.textContent = formatNum(max);
+
+    resultEl.textContent = 'Mean = ' + formatNum(m) + ', Median = ' + formatNum(med) + (mod.length ? ', Mode = ' + mod.map(formatNum).join(', ') : ', no mode');
+    resultEl.className = 'result';
+    syncUrl();
+  }
+
+  numbersEl.addEventListener('input', run);
+  numbersEl.addEventListener('change', run);
+
+  (function initFromUrl() {
+    var params = new URLSearchParams(window.location.search);
+    var n = params.get('n');
+    if (n != null) numbersEl.value = n.replace(/,/g, ', ');
+    run();
+  })();
+})();
+  </script>
+</body>
+</html>

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sort list</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input, textarea, select, button { font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; background: #f0f1f3; color: #1a1a1a; font-size: 0.95rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
+    .note { font-size: 0.85rem; color: #555; margin: 0 0 1rem 0; }
+    .card { background: #fff; border-radius: 10px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e5e7eb; margin-bottom: 1rem; }
+    .card h2 { margin: 0 0 0.5rem 0; font-size: 0.95rem; color: #333; }
+    label { display: block; margin-bottom: 0.2rem; font-weight: 500; font-size: 0.9rem; }
+    .row { margin-bottom: 0.75rem; }
+    .row:last-child { margin-bottom: 0; }
+    textarea { width: 100%; min-height: 100px; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; font-family: ui-monospace, monospace; resize: vertical; -webkit-user-select: text; user-select: text; }
+    textarea:focus { outline: none; border-color: #1a73e8; }
+    select, input[type="text"] { padding: 0.4rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; }
+    select:focus, input:focus { outline: none; border-color: #1a73e8; }
+    .opts-row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 0.75rem; }
+    .opts-row label { margin-bottom: 0; margin-right: 0.25rem; font-weight: normal; }
+    .opts-row .custom-sep { width: 3rem; text-align: center; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+    .actions button { padding: 0.4rem 0.75rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 0.88rem; cursor: pointer; }
+    .actions button:hover { border-color: #1a73e8; background: #f0f7ff; }
+    .actions button.primary { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+    .actions button.primary:hover { background: #1557b0; }
+    .output-wrap { margin-top: 1rem; }
+    .output-wrap label { margin-bottom: 0.35rem; }
+    #output { min-height: 80px; background: #f8f9fa; }
+    .output-meta { font-size: 0.8rem; color: #6b7280; margin-top: 0.35rem; }
+    .output-meta.error { color: #c00; }
+    .btn-copy { margin-top: 0.5rem; padding: 0.35rem 0.6rem; font-size: 0.85rem; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
+    .btn-copy:hover { background: #f0f1f3; }
+  </style>
+</head>
+<body>
+  <h1>Sort list</h1>
+  <p class="note">Paste your list below, choose how items are split (separator) and whether to trim whitespace. Then run an action: sort, find missing numbers, remove duplicates, reverse, shuffle, and more.</p>
+
+  <div class="card">
+    <h2>Input</h2>
+    <div class="row">
+      <label for="input">List (one item per line or use separator)</label>
+      <textarea id="input" placeholder="e.g. banana&#10;apple&#10;cherry&#10;apple&#10;banana" spellcheck="false"></textarea>
+    </div>
+    <div class="opts-row">
+      <label for="sep">Input separator</label>
+      <select id="sep" aria-label="Input separator">
+        <option value="newline">Newline</option>
+        <option value=",">Comma (,)</option>
+        <option value=";">Semicolon (;)</option>
+        <option value=" ">Space</option>
+        <option value="\t">Tab</option>
+        <option value="|">Pipe (|)</option>
+        <option value="custom">Custom</option>
+      </select>
+      <input type="text" id="customSep" class="custom-sep" maxlength="1" placeholder="?" aria-label="Custom input separator" style="display: none;" />
+      <label for="sepOut">Output separator</label>
+      <select id="sepOut" aria-label="Output separator">
+        <option value="newline">Newline</option>
+        <option value=",">Comma (,)</option>
+        <option value=";">Semicolon (;)</option>
+        <option value=" ">Space</option>
+        <option value="\t">Tab</option>
+        <option value="|">Pipe (|)</option>
+        <option value="custom">Custom</option>
+      </select>
+      <input type="text" id="customSepOut" class="custom-sep" maxlength="1" placeholder="?" aria-label="Custom output separator" style="display: none;" />
+      <label><input type="checkbox" id="trim" checked /> Trim each item</label>
+    </div>
+
+    <h2 style="margin-top: 1rem;">Actions</h2>
+    <div class="actions">
+      <button type="button" data-action="sort-asc" class="primary">Sort A→Z</button>
+      <button type="button" data-action="sort-desc">Sort Z→A</button>
+      <button type="button" data-action="sort-num-asc">Sort numeric ↑</button>
+      <button type="button" data-action="sort-num-desc">Sort numeric ↓</button>
+      <button type="button" data-action="find-missing">Find missing</button>
+      <button type="button" data-action="dedupe">Remove duplicates</button>
+      <button type="button" data-action="remove-empty">Remove empty</button>
+      <button type="button" data-action="reverse">Reverse</button>
+      <button type="button" data-action="shuffle">Shuffle</button>
+      <button type="button" data-action="count">Count items</button>
+      <button type="button" data-action="change-sep">Change separator</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="output-wrap">
+      <label for="output">Result</label>
+      <textarea id="output" readonly placeholder="Run an action to see result."></textarea>
+      <p class="output-meta" id="outputMeta">—</p>
+      <button type="button" class="btn-copy" id="copyBtn">Copy result</button>
+    </div>
+  </div>
+
+  <script>
+(function () {
+  var inputEl = document.getElementById('input');
+  var sepEl = document.getElementById('sep');
+  var customSepEl = document.getElementById('customSep');
+  var sepOutEl = document.getElementById('sepOut');
+  var customSepOutEl = document.getElementById('customSepOut');
+  var trimEl = document.getElementById('trim');
+  var outputEl = document.getElementById('output');
+  var outputMetaEl = document.getElementById('outputMeta');
+  var copyBtn = document.getElementById('copyBtn');
+
+  var SEP_VALUES = { newline: '\n', ',': ',', ';': ';', ' ': ' ', '\t': '\t', '|': '|' };
+
+  function getSeparator() {
+    var v = sepEl.value;
+    if (v === 'custom') return (customSepEl.value || ',').charAt(0);
+    return SEP_VALUES[v] != null ? SEP_VALUES[v] : ',';
+  }
+
+  function getOutputSeparator() {
+    var v = sepOutEl.value;
+    if (v === 'custom') return (customSepOutEl.value || '\n').charAt(0);
+    return SEP_VALUES[v] != null ? SEP_VALUES[v] : '\n';
+  }
+
+  function parseList() {
+    var raw = (inputEl.value || '').trim();
+    if (raw === '') return [];
+    var sep = getSeparator();
+    var re = sep === '\n' ? /\r?\n/ : (sep === ' ' ? /\s+/ : new RegExp(escapeRe(sep), 'g'));
+    var parts = raw.split(re);
+    var trim = trimEl.checked;
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var s = trim ? parts[i].trim() : parts[i];
+      out.push(s);
+    }
+    return out;
+  }
+
+  function escapeRe(c) {
+    return /[\\.*+?^${}()|[\]\\]/.test(c) ? '\\' + c : c;
+  }
+
+  function joinList(arr, sep) {
+    if (sep === undefined) sep = getOutputSeparator();
+    return arr.join(sep === '\n' ? '\n' : sep);
+  }
+
+  function allNumeric(arr) {
+    for (var i = 0; i < arr.length; i++) {
+      var n = parseFloat(arr[i]);
+      if (arr[i] !== '' && (!isFinite(n) || String(n).trim() !== String(arr[i]).trim())) return false;
+    }
+    return true;
+  }
+
+  function findMissing(arr) {
+    var nums = [];
+    for (var i = 0; i < arr.length; i++) {
+      var n = parseFloat(arr[i]);
+      if (isFinite(n) && Number.isInteger(n)) nums.push(n);
+    }
+    if (nums.length === 0) return null;
+    var min = Math.min.apply(null, nums);
+    var max = Math.max.apply(null, nums);
+    var set = {};
+    for (var j = 0; j < nums.length; j++) set[nums[j]] = true;
+    var out = [];
+    for (var k = min; k <= max; k++) {
+      if (!set[k]) out.push(k);
+    }
+    return out;
+  }
+
+  function shuffleArray(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i];
+      a[i] = a[j];
+      a[j] = t;
+    }
+    return a;
+  }
+
+  function runAction(actionId) {
+    var list = parseList();
+    var result = [];
+    var meta = '';
+
+    switch (actionId) {
+      case 'sort-asc':
+        result = list.slice().sort(function (a, b) { return String(a).localeCompare(String(b), undefined, { numeric: true }); });
+        meta = result.length + ' items, sorted A→Z';
+        break;
+      case 'sort-desc':
+        result = list.slice().sort(function (a, b) { return String(b).localeCompare(String(a), undefined, { numeric: true }); });
+        meta = result.length + ' items, sorted Z→A';
+        break;
+      case 'sort-num-asc':
+        result = list.slice().sort(function (a, b) { return parseFloat(a) - parseFloat(b); });
+        meta = result.length + ' items, sorted numeric ascending';
+        break;
+      case 'sort-num-desc':
+        result = list.slice().sort(function (a, b) { return parseFloat(b) - parseFloat(a); });
+        meta = result.length + ' items, sorted numeric descending';
+        break;
+      case 'find-missing': {
+        var missing = findMissing(list);
+        if (missing === null) {
+          outputEl.value = '';
+          outputMetaEl.textContent = list.length ? 'No integers found in list. Add whole numbers (e.g. 1, 2, 3) to find gaps.' : 'Enter numbers first.';
+          outputMetaEl.classList.add('error');
+        } else {
+          var sepOut = getOutputSeparator();
+          outputEl.value = missing.length ? missing.join(sepOut === '\n' ? '\n' : sepOut) : '';
+          outputMetaEl.textContent = missing.length ? 'Missing in range: ' + missing.join(', ') : 'No missing integers in range.';
+          outputMetaEl.classList.remove('error');
+        }
+        syncUrl(actionId);
+        return;
+      }
+      case 'dedupe': {
+        var seen = {};
+        var out = [];
+        for (var d = 0; d < list.length; d++) {
+          var key = list[d];
+          if (!seen[key]) { seen[key] = true; out.push(key); }
+        }
+        result = out;
+        meta = list.length + ' → ' + result.length + ' (removed ' + (list.length - result.length) + ' duplicate(s))';
+        break;
+      }
+      case 'remove-empty':
+        result = list.filter(function (x) { return String(x).trim() !== ''; });
+        meta = list.length + ' → ' + result.length + ' (removed ' + (list.length - result.length) + ' empty)';
+        break;
+      case 'reverse':
+        result = list.slice().reverse();
+        meta = result.length + ' items, reversed';
+        break;
+      case 'shuffle':
+        result = shuffleArray(list);
+        meta = result.length + ' items, shuffled';
+        break;
+      case 'count':
+        outputEl.value = String(list.length);
+        outputMetaEl.textContent = list.length + ' item(s)';
+        outputMetaEl.classList.toggle('error', false);
+        syncUrl(actionId);
+        return;
+      case 'change-sep':
+        result = list.slice();
+        meta = result.length + ' items, re-joined with output separator';
+        break;
+      default:
+        meta = 'Unknown action';
+    }
+
+    outputEl.value = joinList(result);
+    outputMetaEl.textContent = meta;
+    outputMetaEl.classList.toggle('error', false);
+    syncUrl(actionId);
+  }
+
+  function syncUrl(action) {
+    var params = new URLSearchParams(window.location.search);
+    var raw = (inputEl.value || '').trim();
+    if (raw) params.set('list', raw);
+    else params.delete('list');
+    params.set('sep', sepEl.value);
+    if (sepEl.value === 'custom') params.set('customSep', customSepEl.value);
+    params.set('sepOut', sepOutEl.value);
+    if (sepOutEl.value === 'custom') params.set('customSepOut', customSepOutEl.value);
+    params.set('trim', trimEl.checked ? '1' : '0');
+    if (action) params.set('action', action);
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'helpers-set-query', query: Object.fromEntries(params) }, '*');
+    } else {
+      window.history.replaceState(null, '', window.location.pathname + '?' + params.toString());
+    }
+  }
+
+  sepEl.addEventListener('change', function () {
+    customSepEl.style.display = sepEl.value === 'custom' ? 'inline-block' : 'none';
+    syncUrl();
+  });
+  sepOutEl.addEventListener('change', function () {
+    customSepOutEl.style.display = sepOutEl.value === 'custom' ? 'inline-block' : 'none';
+    syncUrl();
+  });
+
+  customSepEl.addEventListener('input', syncUrl);
+  customSepEl.addEventListener('change', syncUrl);
+  customSepOutEl.addEventListener('input', syncUrl);
+  customSepOutEl.addEventListener('change', syncUrl);
+  inputEl.addEventListener('input', syncUrl);
+  inputEl.addEventListener('change', syncUrl);
+  trimEl.addEventListener('change', syncUrl);
+
+  document.querySelectorAll('.actions button[data-action]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      runAction(this.getAttribute('data-action'));
+    });
+  });
+
+  copyBtn.addEventListener('click', function () {
+    outputEl.select();
+    try {
+      document.execCommand('copy');
+      copyBtn.textContent = 'Copied!';
+      setTimeout(function () { copyBtn.textContent = 'Copy result'; }, 1500);
+    } catch (e) {
+      navigator.clipboard.writeText(outputEl.value).then(function () {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(function () { copyBtn.textContent = 'Copy result'; }, 1500);
+      });
+    }
+  });
+
+  (function initFromUrl() {
+    var params = new URLSearchParams(window.location.search);
+    var list = params.get('list');
+    if (list != null) inputEl.value = list;
+    var sep = params.get('sep');
+    if (sep != null) sepEl.value = sep;
+    if (sep === 'custom') {
+      customSepEl.style.display = 'inline-block';
+      var c = params.get('customSep');
+      if (c != null) customSepEl.value = c;
+    }
+    var sepOut = params.get('sepOut');
+    if (sepOut != null) sepOutEl.value = sepOut;
+    if (sepOut === 'custom') {
+      customSepOutEl.style.display = 'inline-block';
+      var co = params.get('customSepOut');
+      if (co != null) customSepOutEl.value = co;
+    }
+    var trim = params.get('trim');
+    if (trim != null) trimEl.checked = trim === '1';
+    var action = params.get('action');
+    if (action) runAction(action);
+    else syncUrl();
+  })();
+})();
+  </script>
+</body>
+</html>

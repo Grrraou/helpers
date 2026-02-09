@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T22:19:26.919Z",
+  "generatedAt": "2026-02-09T23:02:33.803Z",
   "categories": [
     "Text",
     "Encoding",
@@ -177,6 +177,29 @@
       ],
       "order": 3,
       "icon": "🔀"
+    },
+    {
+      "id": "sort-list",
+      "path": "tools/sort-list/",
+      "name": "Sort list",
+      "category": "Text",
+      "categories": [
+        "Text"
+      ],
+      "description": "Paste a list, choose separator (comma, semicolon, newline, etc.) and trim option. Sort ASC/DESC, find missing numbers, remove duplicates, reverse, shuffle and more.",
+      "keywords": [
+        "sort",
+        "list",
+        "separator",
+        "trim",
+        "deduplicate",
+        "missing",
+        "reverse",
+        "shuffle",
+        "csv"
+      ],
+      "order": 4,
+      "icon": "⇅"
     },
     {
       "id": "base-converter",
@@ -544,6 +567,28 @@
       ],
       "order": 11,
       "icon": "%"
+    },
+    {
+      "id": "average-median-mode",
+      "path": "tools/average-median-mode/",
+      "name": "Average / median / mode calculator",
+      "category": "Units & Numbers",
+      "categories": [
+        "Units & Numbers"
+      ],
+      "description": "Compute mean (average), median, and mode from a list of numbers. Paste comma- or newline-separated values; see count, sum, min and max too.",
+      "keywords": [
+        "average",
+        "mean",
+        "median",
+        "mode",
+        "statistics",
+        "calculator",
+        "numbers",
+        "list"
+      ],
+      "order": 12,
+      "icon": "∑"
     },
     {
       "id": "finance-calculator",
