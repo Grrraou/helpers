@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T00:51:36.040Z",
+  "generatedAt": "2026-02-09T00:58:26.280Z",
   "categories": [
     "Text",
     "Encoding",
@@ -228,6 +228,24 @@
       ],
       "order": 3,
       "icon": "⏰"
+    },
+    {
+      "id": "keyboard-shortcuts",
+      "path": "tools/keyboard-shortcuts/",
+      "name": "Keyboard shortcuts",
+      "category": "Other",
+      "description": "OS keyboard shortcuts: Windows, Mac, and Linux with search",
+      "keywords": [
+        "keyboard",
+        "shortcut",
+        "hotkey",
+        "windows",
+        "mac",
+        "linux",
+        "reference"
+      ],
+      "order": 4,
+      "icon": "⌨️"
     }
   ]
 }

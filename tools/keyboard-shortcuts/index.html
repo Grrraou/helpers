@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OS keyboard shortcuts</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input { -webkit-user-select: text; user-select: text; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; }
+    input[type="text"] { font-size: 0.95rem; padding: 0.5rem; width: 100%; max-width: 24rem; border: 1px solid #ccc; border-radius: 4px; }
+    input[type="text"]:focus { outline: none; border-color: #1a73e8; }
+    .row { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .filter-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .table-wrap { border: 1px solid #e0e0e0; border-radius: 6px; overflow: auto; max-height: 65vh; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #eee; vertical-align: top; }
+    th { position: sticky; top: 0; background: #f5f5f5; font-weight: 600; color: #333; z-index: 1; white-space: nowrap; }
+    tr:hover td { background: #fafafa; }
+    .action { font-weight: 500; }
+    .key { font-family: ui-monospace, monospace; font-size: 0.85em; white-space: nowrap; }
+    .count { font-size: 0.85rem; color: #666; margin-left: 0.5rem; }
+    .no-results { padding: 1.5rem; color: #666; text-align: center; }
+    @media (max-width: 720px) { th:nth-child(n+3), td:nth-child(n+3) { font-size: 0.8rem; } }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <div class="filter-row">
+      <label for="search" style="margin-bottom: 0;">Search</label>
+      <input type="text" id="search" placeholder="Search by action or shortcut (e.g. copy, Ctrl+C)…" aria-label="Search shortcuts" autocomplete="off" />
+      <span class="count" id="count"></span>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Action</th><th>Windows</th><th>Mac</th><th>Linux</th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <p id="noResults" class="no-results" style="display: none;">No matching shortcuts.</p>
+  </div>
+
+  <script>
+    (function () {
+      var SHORTCUTS = [
+        { action: 'Copy', win: 'Ctrl + C', mac: '⌘ Cmd + C', linux: 'Ctrl + C' },
+        { action: 'Paste', win: 'Ctrl + V', mac: '⌘ Cmd + V', linux: 'Ctrl + V' },
+        { action: 'Cut', win: 'Ctrl + X', mac: '⌘ Cmd + X', linux: 'Ctrl + X' },
+        { action: 'Undo', win: 'Ctrl + Z', mac: '⌘ Cmd + Z', linux: 'Ctrl + Z' },
+        { action: 'Redo', win: 'Ctrl + Y', mac: '⌘ Cmd + Shift + Z', linux: 'Ctrl + Shift + Z' },
+        { action: 'Select all', win: 'Ctrl + A', mac: '⌘ Cmd + A', linux: 'Ctrl + A' },
+        { action: 'Find', win: 'Ctrl + F', mac: '⌘ Cmd + F', linux: 'Ctrl + F' },
+        { action: 'Find and replace', win: 'Ctrl + H', mac: '⌘ Cmd + Option + F', linux: 'Ctrl + H' },
+        { action: 'Save', win: 'Ctrl + S', mac: '⌘ Cmd + S', linux: 'Ctrl + S' },
+        { action: 'Print', win: 'Ctrl + P', mac: '⌘ Cmd + P', linux: 'Ctrl + P' },
+        { action: 'New window / tab', win: 'Ctrl + N / Ctrl + T', mac: '⌘ Cmd + N / ⌘ Cmd + T', linux: 'Ctrl + N / Ctrl + T' },
+        { action: 'Close tab / window', win: 'Ctrl + W / Alt + F4', mac: '⌘ Cmd + W / ⌘ Cmd + Q', linux: 'Ctrl + W / Alt + F4' },
+        { action: 'Refresh / Reload', win: 'F5 or Ctrl + R', mac: '⌘ Cmd + R', linux: 'F5 or Ctrl + R' },
+        { action: 'Hard refresh (clear cache)', win: 'Ctrl + Shift + R', mac: '⌘ Cmd + Shift + R', linux: 'Ctrl + Shift + R' },
+        { action: 'Switch app / window', win: 'Alt + Tab', mac: '⌘ Cmd + Tab', linux: 'Alt + Tab or Super + Tab' },
+        { action: 'Switch tab (browser)', win: 'Ctrl + Tab', mac: '⌘ Cmd + Shift + ]', linux: 'Ctrl + Tab' },
+        { action: 'Previous tab', win: 'Ctrl + Shift + Tab', mac: '⌘ Cmd + Shift + [', linux: 'Ctrl + Shift + Tab' },
+        { action: 'Lock screen', win: 'Win + L', mac: '⌘ Cmd + Ctrl + Q', linux: 'Ctrl + Alt + L or Super + L' },
+        { action: 'Sleep / Suspend', win: 'Win + X then U then S', mac: '⌘ Cmd + Option + Power', linux: 'Super + L or system shortcut' },
+        { action: 'Task Manager / Force Quit', win: 'Ctrl + Shift + Esc', mac: '⌘ Cmd + Option + Esc', linux: 'Ctrl + Esc or Super + Esc' },
+        { action: 'Run / Spotlight / Launcher', win: 'Win + R', mac: '⌘ Cmd + Space', linux: 'Alt + F2 or Super' },
+        { action: 'File Explorer / Finder', win: 'Win + E', mac: '⌘ Cmd + Option + Space', linux: 'Super + E or Nautilus' },
+        { action: 'Desktop', win: 'Win + D', mac: 'F11 (Mission Control)', linux: 'Ctrl + Alt + D or Super + D' },
+        { action: 'Minimize window', win: 'Win + Down', mac: '⌘ Cmd + M', linux: 'Super + Down or Ctrl + Alt + 0' },
+        { action: 'Maximize window', win: 'Win + Up', mac: '⌘ Cmd + Ctrl + F', linux: 'Super + Up' },
+        { action: 'Snap window left/right', win: 'Win + Left / Win + Right', mac: '⌘ Cmd + Ctrl + F then move', linux: 'Super + Left / Super + Right' },
+        { action: 'Screenshot (full)', win: 'PrtScn or Win + PrtScn', mac: '⌘ Cmd + Shift + 3', linux: 'PrtScn or Super + Shift + 3' },
+        { action: 'Screenshot (region)', win: 'Win + Shift + S', mac: '⌘ Cmd + Shift + 4', linux: 'Shift + PrtScn or Super + Shift + 4' },
+        { action: 'Emoji / symbol picker', win: 'Win + . or Win + ;', mac: 'Ctrl + ⌘ Cmd + Space', linux: 'Ctrl + . or Compose' },
+        { action: 'Zoom in', win: 'Ctrl + Plus', mac: '⌘ Cmd + Plus', linux: 'Ctrl + Plus' },
+        { action: 'Zoom out', win: 'Ctrl + Minus', mac: '⌘ Cmd + Minus', linux: 'Ctrl + Minus' },
+        { action: 'Reset zoom', win: 'Ctrl + 0', mac: '⌘ Cmd + 0', linux: 'Ctrl + 0' },
+        { action: 'Toggle full screen', win: 'F11', mac: '⌘ Cmd + Ctrl + F', linux: 'F11' },
+        { action: 'Go to address bar', win: 'Ctrl + L or Alt + D', mac: '⌘ Cmd + L', linux: 'Ctrl + L or Alt + D' },
+        { action: 'Back (browser)', win: 'Alt + Left', mac: '⌘ Cmd + [', linux: 'Alt + Left' },
+        { action: 'Forward (browser)', win: 'Alt + Right', mac: '⌘ Cmd + ]', linux: 'Alt + Right' },
+        { action: 'Home (browser)', win: 'Alt + Home', mac: '⌘ Cmd + Shift + H', linux: 'Alt + Home' },
+        { action: 'Bookmarks', win: 'Ctrl + Shift + O', mac: '⌘ Cmd + Option + B', linux: 'Ctrl + Shift + O' },
+        { action: 'History', win: 'Ctrl + H', mac: '⌘ Cmd + Y', linux: 'Ctrl + H' },
+        { action: 'Developer tools', win: 'F12 or Ctrl + Shift + I', mac: '⌘ Cmd + Option + I', linux: 'F12 or Ctrl + Shift + I' },
+        { action: 'New incognito / private window', win: 'Ctrl + Shift + N', mac: '⌘ Cmd + Shift + N', linux: 'Ctrl + Shift + N' },
+        { action: 'Move cursor to line start/end', win: 'Home / End', mac: '⌘ Cmd + Left / ⌘ Cmd + Right', linux: 'Home / End' },
+        { action: 'Move cursor to word', win: 'Ctrl + Left / Right', mac: 'Option + Left / Right', linux: 'Ctrl + Left / Right' },
+        { action: 'Select to line start/end', win: 'Shift + Home / End', mac: '⌘ Cmd + Shift + Left / Right', linux: 'Shift + Home / End' },
+        { action: 'Delete word forward', win: 'Ctrl + Delete', mac: 'Option + Delete', linux: 'Ctrl + Delete' },
+        { action: 'Delete word backward', win: 'Ctrl + Backspace', mac: 'Option + Backspace', linux: 'Ctrl + Backspace' },
+        { action: 'Open terminal', win: 'Win + R then cmd', mac: '⌘ Cmd + Space then Terminal', linux: 'Ctrl + Alt + T or Super + T' },
+        { action: 'Terminal: clear', win: 'cls', mac: '⌘ Cmd + K', linux: 'Ctrl + L' },
+        { action: 'Terminal: cancel command', win: 'Ctrl + C', mac: 'Ctrl + C', linux: 'Ctrl + C' },
+        { action: 'Terminal: exit', win: 'exit', mac: '⌘ Cmd + D or exit', linux: 'exit or Ctrl + D' },
+        { action: 'Show hidden files', win: 'Explorer: View → Show', mac: '⌘ Cmd + Shift + .', linux: 'Ctrl + H (Nautilus)' },
+        { action: 'Rename file', win: 'F2', mac: 'Enter (in list)', linux: 'F2' },
+        { action: 'Delete file (to recycle)', win: 'Delete', mac: '⌘ Cmd + Delete', linux: 'Delete' },
+        { action: 'Permanent delete', win: 'Shift + Delete', mac: '⌘ Cmd + Option + Delete', linux: 'Shift + Delete' },
+        { action: 'Open context menu', win: 'Shift + F10 or menu key', mac: 'Ctrl + click or two-finger', linux: 'Shift + F10 or menu key' },
+        { action: 'Focus menu bar', win: 'Alt', mac: 'Ctrl + F2', linux: 'Alt' },
+        { action: 'System settings', win: 'Win + I', mac: '⌘ Cmd + , (in app) or Apple menu', linux: 'Super then type Settings' },
+        { action: 'Notifications', win: 'Win + N', mac: 'No shortcut', linux: 'Super + N or Super + M' },
+        { action: 'Virtual desktops: add', win: 'Win + Ctrl + D', mac: 'Ctrl + Up (Mission Control)', linux: 'Ctrl + Alt + D (add) / Super + Page Up/Down' },
+        { action: 'Virtual desktops: switch', win: 'Win + Ctrl + Left/Right', mac: 'Ctrl + Left/Right', linux: 'Ctrl + Alt + Left/Right or Super + Page Up/Down' },
+        { action: 'Minimize all / Show desktop', win: 'Win + D', mac: 'F11 or spread fingers', linux: 'Ctrl + Super + D' },
+        { action: 'Aero Flip / window picker', win: 'Win + Tab', mac: 'Ctrl + Down (App Exposé)', linux: 'Super + Tab or Alt + Tab' },
+        { action: 'Search in page', win: 'Ctrl + F', mac: '⌘ Cmd + F', linux: 'Ctrl + F' },
+        { action: 'Toggle caret browsing', win: 'F7', mac: 'Not common', linux: 'F7' },
+        { action: 'Stop loading', win: 'Esc or Ctrl + W (close)', mac: '⌘ Cmd + .', linux: 'Esc' },
+        { action: 'Open link in new tab', win: 'Ctrl + Click or Middle click', mac: '⌘ Cmd + Click', linux: 'Ctrl + Click or Middle click' },
+        { action: 'Reopen closed tab', win: 'Ctrl + Shift + T', mac: '⌘ Cmd + Shift + T', linux: 'Ctrl + Shift + T' },
+        { action: 'Duplicate tab', win: 'Ctrl + K (Chrome) or varies', mac: '⌘ Cmd + Shift + D (Safari)', linux: 'Varies by browser' },
+        { action: 'Move to start of document', win: 'Ctrl + Home', mac: '⌘ Cmd + Up', linux: 'Ctrl + Home' },
+        { action: 'Move to end of document', win: 'Ctrl + End', mac: '⌘ Cmd + Down', linux: 'Ctrl + End' },
+        { action: 'Page up / Page down', win: 'Page Up / Page Down', mac: 'Fn + Up / Fn + Down', linux: 'Page Up / Page Down' },
+        { action: 'Toggle caps lock', win: 'Caps Lock', mac: 'Caps Lock', linux: 'Caps Lock' },
+        { action: 'Insert key (overtype)', win: 'Insert', mac: 'Fn + Enter (rare)', linux: 'Insert' },
+        { action: 'Num Lock', win: 'Num Lock', mac: 'Clear (keypad)', linux: 'Num Lock' }
+      ];
+
+      var searchInput = document.getElementById('search');
+      var tbody = document.getElementById('tbody');
+      var countEl = document.getElementById('count');
+      var noResults = document.getElementById('noResults');
+
+      function escapeHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function render() {
+        var q = (searchInput.value || '').trim().toLowerCase();
+        var filtered = SHORTCUTS.filter(function (item) {
+          if (!q) return true;
+          var action = (item.action || '').toLowerCase();
+          var win = (item.win || '').toLowerCase();
+          var mac = (item.mac || '').toLowerCase();
+          var linux = (item.linux || '').toLowerCase();
+          return action.indexOf(q) !== -1 || win.indexOf(q) !== -1 || mac.indexOf(q) !== -1 || linux.indexOf(q) !== -1;
+        });
+        tbody.innerHTML = '';
+        noResults.style.display = 'none';
+        if (filtered.length === 0) {
+          noResults.style.display = 'block';
+          countEl.textContent = '';
+          return;
+        }
+        countEl.textContent = filtered.length + ' of ' + SHORTCUTS.length;
+        filtered.forEach(function (item) {
+          var tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td class="action">' + escapeHtml(item.action) + '</td>' +
+            '<td class="key">' + escapeHtml(item.win) + '</td>' +
+            '<td class="key">' + escapeHtml(item.mac) + '</td>' +
+            '<td class="key">' + escapeHtml(item.linux) + '</td>';
+          tbody.appendChild(tr);
+        });
+      }
+
+      searchInput.addEventListener('input', render);
+      searchInput.addEventListener('keyup', render);
+      render();
+
+      var params = new URLSearchParams(window.location.search);
+      var qParam = params.get('q') || params.get('search');
+      if (qParam != null && qParam !== '') {
+        searchInput.value = qParam.replace(/\+/g, ' ');
+        render();
+      }
+    })();
+  </script>
+</body>
+</html>
