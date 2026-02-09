@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-09T12:32:58.307Z",
+  "generatedAt": "2026-02-09T13:03:39.049Z",
   "categories": [
     "Text",
     "Encoding",
@@ -450,6 +450,27 @@
       ],
       "order": 3,
       "icon": "⏰"
+    },
+    {
+      "id": "date-comparator",
+      "path": "tools/date-comparator/",
+      "name": "Date comparator",
+      "category": "Time & Date",
+      "categories": [
+        "Time & Date"
+      ],
+      "description": "Compare two dates with date pickers. See difference in days, weeks, months, years. URL params for sharing.",
+      "keywords": [
+        "date",
+        "compare",
+        "difference",
+        "days",
+        "weeks",
+        "picker",
+        "calendar"
+      ],
+      "order": 4,
+      "icon": "📅"
     },
     {
       "id": "countdown",

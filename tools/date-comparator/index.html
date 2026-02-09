@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Date comparator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body, input { -webkit-user-select: text; user-select: text; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; background: #fff; color: #1a1a1a; font-size: 0.95rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem 0; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
+    .row { margin-bottom: 1rem; }
+    input[type="date"], input[type="time"] { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    input:focus { outline: none; border-color: #1a73e8; }
+    .picker-row { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
+    .picker-row label { margin-bottom: 0; }
+    .note { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 32rem; }
+    @media (max-width: 480px) { .two-col { grid-template-columns: 1fr; } }
+    .date-card { padding: 1rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #e5e7eb; }
+    .date-card h2 { font-size: 0.95rem; margin: 0 0 0.75rem 0; color: #333; }
+    .result-block { margin-top: 1.25rem; padding: 1rem; background: #e8f0fe; border-radius: 8px; border: 1px solid #b0c4e8; }
+    .result-block.empty { background: #f5f5f5; border-color: #eee; }
+    .result-summary { font-size: 1.05rem; font-weight: 500; margin-bottom: 0.75rem; }
+    .result-summary.empty { color: #999; font-weight: normal; }
+    .result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.5rem; }
+    .result-item { background: #fff; border-radius: 6px; padding: 0.5rem 0.65rem; text-align: center; border: 1px solid #e0e0e0; }
+    .result-item .value { font-family: ui-monospace, monospace; font-size: 1.1rem; font-weight: 600; display: block; }
+    .result-item .unit { font-size: 0.72rem; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Date comparator</h1>
+  <p style="margin: 0 0 1rem 0; font-size: 0.9rem; color: #555;">Pick two dates to see the difference between them. Uses your local time zone.</p>
+
+  <div class="two-col">
+    <div class="date-card">
+      <h2>Date A</h2>
+      <div class="row">
+        <label for="dateA">Date</label>
+        <div class="picker-row">
+          <input type="date" id="dateA" aria-label="Date A" />
+        </div>
+      </div>
+      <div class="row">
+        <label for="timeA">Time (optional)</label>
+        <div class="picker-row">
+          <input type="time" id="timeA" value="00:00" step="1" aria-label="Time A" />
+        </div>
+      </div>
+    </div>
+    <div class="date-card">
+      <h2>Date B</h2>
+      <div class="row">
+        <label for="dateB">Date</label>
+        <div class="picker-row">
+          <input type="date" id="dateB" aria-label="Date B" />
+        </div>
+      </div>
+      <div class="row">
+        <label for="timeB">Time (optional)</label>
+        <div class="picker-row">
+          <input type="time" id="timeB" value="00:00" step="1" aria-label="Time B" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="result-block empty" id="resultBlock">
+    <div class="result-summary empty" id="resultSummary">Pick both dates above.</div>
+    <div class="result-grid" id="resultGrid"></div>
+  </div>
+
+  <script>
+(function () {
+  var dateA = document.getElementById('dateA');
+  var timeA = document.getElementById('timeA');
+  var dateB = document.getElementById('dateB');
+  var timeB = document.getElementById('timeB');
+  var resultBlock = document.getElementById('resultBlock');
+  var resultSummary = document.getElementById('resultSummary');
+  var resultGrid = document.getElementById('resultGrid');
+
+  var UNITS = [
+    { key: 'days', label: 'Days', format: function (ms) { return Math.round(ms / 86400000); } },
+    { key: 'weeks', label: 'Weeks', format: function (ms) { return (ms / 604800000).toFixed(1); } },
+    { key: 'months', label: 'Months (approx)', format: function (ms) { return (ms / (86400000 * 30.44)).toFixed(1); } },
+    { key: 'years', label: 'Years (approx)', format: function (ms) { return (ms / (86400000 * 365.25)).toFixed(2); } }
+  ];
+
+  function buildGrid() {
+    resultGrid.innerHTML = '';
+    UNITS.forEach(function (u) {
+      var div = document.createElement('div');
+      div.className = 'result-item';
+      div.innerHTML = '<span class="value" data-key="' + u.key + '">—</span><span class="unit">' + u.label + '</span>';
+      resultGrid.appendChild(div);
+    });
+  }
+
+  function getMs(elDate, elTime) {
+    var d = (elDate.value || '').trim();
+    var t = (elTime.value || '00:00').trim();
+    if (!d) return null;
+    if (t.split(':').length === 2) t = t + ':00';
+    var date = new Date(d + 'T' + t);
+    return isNaN(date.getTime()) ? null : date.getTime();
+  }
+
+  function syncUrl() {
+    var params = new URLSearchParams(window.location.search);
+    function set(key, val) { if (val != null && val !== '') params.set(key, val); else params.delete(key); }
+    set('a', dateA.value || null);
+    set('at', timeA.value !== '00:00' ? timeA.value : null);
+    set('b', dateB.value || null);
+    set('bt', timeB.value !== '00:00' ? timeB.value : null);
+    var qs = params.toString();
+    var url = window.location.pathname + (qs ? '?' + qs : '');
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'helpers-set-query', query: Object.fromEntries(params) }, '*');
+    } else {
+      window.history.replaceState(null, '', url);
+    }
+  }
+
+  function update() {
+    var msA = getMs(dateA, timeA);
+    var msB = getMs(dateB, timeB);
+
+    if (msA == null || msB == null) {
+      resultBlock.className = 'result-block empty';
+      resultSummary.textContent = 'Pick both dates above.';
+      resultSummary.className = 'result-summary empty';
+      UNITS.forEach(function (u) {
+        var el = resultGrid.querySelector('[data-key="' + u.key + '"]');
+        if (el) el.textContent = '—';
+      });
+      syncUrl();
+      return;
+    }
+
+    var diffMs = msA - msB;
+    var absMs = Math.abs(diffMs);
+    var earlier = diffMs < 0 ? 'A' : 'B';
+    var later = diffMs < 0 ? 'B' : 'A';
+    var days = Math.round(absMs / 86400000);
+
+    resultBlock.className = 'result-block';
+    resultSummary.className = 'result-summary';
+    if (diffMs === 0) {
+      resultSummary.textContent = 'Date A and Date B are the same.';
+    } else {
+      resultSummary.textContent = 'Date ' + later + ' is ' + days + ' day' + (days !== 1 ? 's' : '') + ' after Date ' + earlier + '.';
+    }
+
+    UNITS.forEach(function (u) {
+      var el = resultGrid.querySelector('[data-key="' + u.key + '"]');
+      if (el) el.textContent = String(u.format(absMs));
+    });
+
+    syncUrl();
+  }
+
+  buildGrid();
+
+  [dateA, timeA, dateB, timeB].forEach(function (el) {
+    el.addEventListener('change', update);
+    el.addEventListener('input', update);
+  });
+
+  (function initFromUrl() {
+    var params = new URLSearchParams(window.location.search);
+    var a = params.get('a');
+    var at = params.get('at');
+    var b = params.get('b');
+    var bt = params.get('bt');
+    if (a != null) dateA.value = a;
+    if (at != null) timeA.value = at;
+    if (b != null) dateB.value = b;
+    if (bt != null) timeB.value = bt;
+    update();
+  })();
+})();
+  </script>
+</body>
+</html>
